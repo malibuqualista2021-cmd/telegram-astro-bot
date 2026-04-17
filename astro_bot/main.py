@@ -89,6 +89,8 @@ def main() -> None:
     application.bot_data["llm"] = llm_svc
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["conversation_turns"] = turns
+    application.bot_data["memory_threshold_msgs"] = settings.MEMORY_SUMMARIZE_AT_MSGS
+    application.bot_data["memory_keep_pairs"] = settings.MEMORY_KEEP_PAIRS
 
     register_command_handlers(application)
     register_callback_handlers(application)

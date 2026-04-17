@@ -10,8 +10,8 @@ from telegram.error import BadRequest
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 from astro_bot.handlers import keyboards as kb
+from astro_bot.i18n import get_lang, t
 from astro_bot.services.faq_service import FaqService
-from astro_bot.texts import ABOUT_TEXT, BURCLAR_TEXT, HELP_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,14 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     data = query.data or ""
     faq: FaqService = context.bot_data["faq"]
+    lang = get_lang(context.user_data.get("lang"))
 
     try:
         if data == "menu:root":
-            text = (
-                "<b>Ana menü</b>\n\n"
-                "Aşağıdaki kısayolları kullan veya doğrudan sorunu yaz."
-            )
+            if lang == "en":
+                text = "<b>Main menu</b>\n\nUse the shortcuts below or type your question."
+            else:
+                text = "<b>Ana menü</b>\n\nAşağıdaki kısayolları kullan veya doğrudan sorunu yaz."
             await _edit_or_send(query, context, text, kb.main_menu_keyboard())
             return
 
@@ -87,11 +88,11 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if data.startswith("static:"):
             key = data.split(":", 1)[1]
             if key == "help":
-                await _edit_or_send(query, context, HELP_TEXT, kb.back_to_menu_keyboard())
+                await _edit_or_send(query, context, t("help", lang), kb.back_to_menu_keyboard())
             elif key == "about":
-                await _edit_or_send(query, context, ABOUT_TEXT, kb.back_to_menu_keyboard())
+                await _edit_or_send(query, context, t("about", lang), kb.back_to_menu_keyboard())
             elif key == "burclar":
-                await _edit_or_send(query, context, BURCLAR_TEXT, kb.back_to_menu_keyboard())
+                await _edit_or_send(query, context, t("burclar", lang), kb.back_to_menu_keyboard())
             return
     except Exception:
         logger.exception("Callback işlenemedi: data=%s", data)

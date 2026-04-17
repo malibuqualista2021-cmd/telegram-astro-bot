@@ -4,7 +4,12 @@
 
 ## Özellikler (özet)
 
-- **Komutlar:** `/start`, `/help`, `/menu`, `/sss`, `/burclar`, `/hakkinda`
+- **Komutlar:** `/start`, `/help`, `/menu`, `/lang`, `/profil`, `/dogum`, `/saat`, `/konum`, `/harita`, `/sss`, `/burclar`, `/hakkinda`
+- **Kişisel profil:** doğum tarihi/saati ve konum (enlem/boylam); LLM yanıtlarına yumuşak bağlam olarak eklenir
+- **Eğitim amaçlı harita özeti:** `ephem` ile Güneş/Ay/Yükselen (yaklaşık; `/harita`)
+- **Niyet:** bilgi / günlük-fal tarzı / şaka — yanıt tonu için ipuçları
+- **Özet hafıza:** uzun sohbette eski kısım LLM ile özetlenir (`MEMORY_SUMMARIZE_AT_MSGS`)
+- **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
 - **Inline menü:** SSS kategorileri, burç listesi, yardım, hakkında (düğmelerle gezinme)
 - **Serbest metin:** Önce `knowledge/faq.json` (alt dize + **rapidfuzz** bulanık eşleşme), yoksa seçilen LLM
 - **Bağlam:** Son birkaç tur sohbet modele özet bağlam olarak gider (`CONVERSATION_MAX_TURNS`)
@@ -94,7 +99,7 @@ telegram-astro-bot/
 │   ├── main.py
 │   ├── config.py
 │   ├── settings.py
-│   ├── texts.py
+│   ├── i18n.py
 │   ├── handlers/
 │   │   ├── commands.py
 │   │   ├── callbacks.py
@@ -103,6 +108,10 @@ telegram-astro-bot/
 │   └── services/
 │       ├── faq_service.py
 │       ├── llm_service.py
+│       ├── profile_service.py
+│       ├── chart_service.py
+│       ├── intent_service.py
+│       ├── memory_service.py
 │       └── rate_limit.py
 ├── knowledge/
 │   └── faq.json
