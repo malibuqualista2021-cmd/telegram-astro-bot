@@ -13,7 +13,8 @@
       "category": "temel",
       "title": "Burç nedir?",
       "triggers": ["burç nedir", "burçlar nedir", "zodyak nedir", "12 burç"],
-      "answer": "Burçlar, ekliptik üzerinde Güneş'in yıl içindeki görünen yolunu 12 eşit parçaya bölen sembolik bölgelerdir (Koç, Boğa, İkizler vb.). Batı astrolojisinde 'Güneş burcu' genelde doğum tarihine yakın bu bölgeyle ilişkilendirilir. Bu çerçeve kültürel ve öz-anlatım içindir; bilimsel kesinlik iddiası taşımaz."
+      "answer": "Burçlar, ekliptik üzerinde Güneş'in yıl içindeki görünen yolunu 12 eşit parçaya bölen sembolik bölgelerdir (Koç, Boğa, İkizler vb.). Batı astrolojisinde 'Güneş burcu' genelde doğum tarihine yakın bu bölgeyle ilişkilendirilir. Bu çerçeve kültürel ve öz-anlatım içindir; bilimsel kesinlik iddiası taşımaz.",
+      "answer_en": "Zodiac signs divide the ecliptic into 12 symbolic segments (Aries, Taurus, Gemini, etc.). In Western astrology the Sun sign is often tied to the segment near your birth date. This is cultural and for self-expression—not a scientific claim."
     },
     {
       "id": "elementler",

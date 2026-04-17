@@ -37,6 +37,12 @@ class FaqEntry:
     title: str
     triggers: tuple[str, ...]
     answer: str
+    answer_en: str | None = None
+
+    def text_for_lang(self, lang: str) -> str:
+        if lang == "en" and self.answer_en and self.answer_en.strip():
+            return self.answer_en.strip()
+        return self.answer
 
 
 class FaqService:
@@ -77,6 +83,10 @@ class FaqService:
             answer = str(item.get("answer", "")).strip()
             if not eid or not answer:
                 continue
+            answer_en_raw = item.get("answer_en")
+            answer_en = str(answer_en_raw).strip() if answer_en_raw is not None else None
+            if answer_en == "":
+                answer_en = None
             cat = str(item.get("category", "genel")).strip() or "genel"
             title = str(item.get("title", "")).strip() or eid.replace("_", " ").title()
             triggers_raw = item.get("triggers", [])
@@ -93,6 +103,7 @@ class FaqService:
                 title=title,
                 triggers=tuple(triggers),
                 answer=answer,
+                answer_en=answer_en,
             )
             self._entries.append(entry)
             self._by_id[eid] = entry
@@ -118,9 +129,9 @@ class FaqService:
     def entries_in_category(self, category: str) -> list[FaqEntry]:
         return [e for e in self._entries if e.category == category]
 
-    def find_answer(self, user_text: str) -> str | None:
+    def find_answer(self, user_text: str, lang: str = "tr") -> str | None:
         entry = self.find_entry(user_text)
-        return entry.answer if entry else None
+        return entry.text_for_lang(lang) if entry else None
 
     def find_entry(self, user_text: str) -> FaqEntry | None:
         if not user_text.strip() or not self._entries:

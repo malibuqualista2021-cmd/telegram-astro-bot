@@ -76,7 +76,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     kb.back_to_menu_keyboard(),
                 )
                 return
-            safe = _escape_html(entry.answer)
+            safe = _escape_html(entry.text_for_lang(lang))
             await _edit_or_send(
                 query,
                 context,

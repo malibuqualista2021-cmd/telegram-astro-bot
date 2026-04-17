@@ -18,6 +18,9 @@ FAQ_FUZZY_THRESHOLD: int = 82
 # Sohbet başına dakikada en fazla kullanıcı mesajı (spam önleme)
 RATE_LIMIT_PER_MINUTE: int = 35
 
+# LLM'e giden tek mesaj üst sınırı (maliyet / güvenlik)
+MAX_USER_MESSAGE_CHARS: int = 4000
+
 # Log dosyası (logs/ altında döner)
 LOG_MAX_BYTES: int = 1_048_576
 LOG_BACKUP_COUNT: int = 3

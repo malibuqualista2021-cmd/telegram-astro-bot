@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 
@@ -17,9 +18,11 @@ from astro_bot.config import (
     LLM_PROVIDER,
     LOGS_DIR,
     LOG_LEVEL,
+    PROJECT_ROOT,
     TELEGRAM_BOT_TOKEN,
     resolved_conversation_turns,
     resolved_faq_fuzzy_threshold,
+    resolved_max_user_message_chars,
     resolved_openai_max_tokens,
     resolved_openai_temperature,
     resolved_rate_limit_per_minute,
@@ -27,9 +30,11 @@ from astro_bot.config import (
 from astro_bot.handlers.callbacks import register_callback_handlers
 from astro_bot.handlers.commands import register_command_handlers
 from astro_bot.handlers.messages import register_message_handlers
+from astro_bot.handlers.persistence import register_persistence_handlers
 from astro_bot.services.faq_service import FaqService
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.rate_limit import ChatRateLimiter
+from astro_bot.services.user_store import create_user_store
 
 
 def setup_logging() -> None:
@@ -57,7 +62,25 @@ def setup_logging() -> None:
     logging.getLogger("telegram").setLevel(logging.INFO)
 
 
+def init_sentry() -> None:
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=dsn,
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+            environment=os.getenv("ENV", "production"),
+        )
+        logging.getLogger(__name__).info("Sentry etkin")
+    except Exception:
+        logging.getLogger(__name__).exception("Sentry başlatılamadı")
+
+
 def main() -> None:
+    init_sentry()
     setup_logging()
     log = logging.getLogger(__name__)
     log.info(
@@ -78,6 +101,7 @@ def main() -> None:
     )
     rate_limiter = ChatRateLimiter(resolved_rate_limit_per_minute())
     turns = resolved_conversation_turns()
+    user_store = create_user_store(PROJECT_ROOT)
 
     application = (
         Application.builder()
@@ -91,7 +115,10 @@ def main() -> None:
     application.bot_data["conversation_turns"] = turns
     application.bot_data["memory_threshold_msgs"] = settings.MEMORY_SUMMARIZE_AT_MSGS
     application.bot_data["memory_keep_pairs"] = settings.MEMORY_KEEP_PAIRS
+    application.bot_data["user_store"] = user_store
+    application.bot_data["max_user_message_chars"] = resolved_max_user_message_chars()
 
+    register_persistence_handlers(application)
     register_command_handlers(application)
     register_callback_handlers(application)
     register_message_handlers(application)

@@ -34,6 +34,13 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     text = update.message.text.strip()
+    max_c = context.bot_data.get(
+        "max_user_message_chars",
+        settings.MAX_USER_MESSAGE_CHARS,
+    )
+    if len(text) > max_c:
+        text = text[:max_c]
+
     chat_id = update.effective_chat.id if update.effective_chat else 0
     lang = get_lang(context.user_data.get("lang"))
 
@@ -56,10 +63,10 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
-    entry = faq.find_entry(text)
-    if entry:
-        await update.message.reply_text(entry.answer)
-        logger.info("Yanıt kaynağı=SSS id=%s chat_id=%s", entry.entry_id, chat_id)
+    faq_ans = faq.find_answer(text, lang)
+    if faq_ans:
+        await update.message.reply_text(faq_ans)
+        logger.info("Yanıt kaynağı=SSS chat_id=%s", chat_id)
         return
 
     hist_raw: list[dict[str, Any]] = list(context.user_data.get("chat_history") or [])
@@ -100,4 +107,9 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 def register_message_handlers(application: Application) -> None:
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message))
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+            text_message,
+        )
+    )

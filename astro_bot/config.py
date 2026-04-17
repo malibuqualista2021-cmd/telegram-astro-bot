@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from astro_bot import settings
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = _PROJECT_ROOT
 load_dotenv(_PROJECT_ROOT / ".env")
 
 
@@ -128,3 +129,8 @@ def resolved_rate_limit_per_minute() -> int:
 def resolved_conversation_turns() -> int:
     v = _optional_int("CONVERSATION_MAX_TURNS", 0)
     return settings.CONVERSATION_MAX_TURNS if v <= 0 else max(1, min(8, v))
+
+
+def resolved_max_user_message_chars() -> int:
+    v = _optional_int("MAX_USER_MESSAGE_CHARS", 0)
+    return settings.MAX_USER_MESSAGE_CHARS if v <= 0 else max(500, min(12000, v))

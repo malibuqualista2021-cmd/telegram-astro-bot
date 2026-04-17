@@ -18,6 +18,11 @@
 - **Güvenlik çerçevesi:** Sistem + kullanıcı notu ile tıbbi/hukuki/finansal yönlendirme yok; emin olunmayan konularda çekingenlik
 - **Loglama:** Konsol + yedeklemeli günlük dosyası (`logs/astro_bot.log`)
 - **Uçtan uca çalışma:** **Long polling** (Railway veya kendi sunucunda süreç olarak çalışır; ayrı web sunucusu gerekmez)
+- **Kalıcı veri (özel sohbet):** `data/bot_state.db` (SQLite) veya **`DATABASE_URL`** ile PostgreSQL — dil, profil, sohbet özeti; süreç yeniden başlasa da kalır (Railway’de kalıcılık için Postgres önerilir)
+- **Özel sohbet:** Serbest metin yanıtları yalnızca **birebir sohbette** (grupta metinle LLM kapalı; maliyet/spam riski)
+- **SSS çevirisi:** `faq.json` içinde isteğe bağlı `answer_en` — `/lang en` iken kullanılır
+- **Girdi sınırı:** `MAX_USER_MESSAGE_CHARS` ile mesaj kırpma (token/maliyet)
+- **İzleme:** İsteğe bağlı **`SENTRY_DSN`**
 
 ## GitHub’a gönderme
 
@@ -44,7 +49,8 @@ git push -u origin main
 2. **Variables** bölümüne ekle:
    - `TELEGRAM_BOT_TOKEN` (zorunlu)
    - LLM anahtarı (**en az biri**): `GROQ_API_KEY` (ücretsiz katman: [Groq](https://console.groq.com/keys)), veya `OPENAI_API_KEY`, veya `GEMINI_API_KEY` / `GOOGLE_API_KEY`
-   - İsteğe bağlı: `LLM_PROVIDER` (`openai` \| `groq` \| `gemini`), `LLM_MODEL`, `LOG_LEVEL`, vb. (`.env.example`)
+   - **Kalıcılık için önerilir:** Railway **PostgreSQL** ekle → `DATABASE_URL` otomatik gelir (profil/sohbet diskte kalır; yalnızca SQLite + geçici disk kullanırsan redeploy’da silinebilir)
+   - İsteğe bağlı: `LLM_PROVIDER`, `LLM_MODEL`, `SENTRY_DSN`, `LOG_LEVEL`, vb. (`.env.example`)
 3. Deploy ayarında başlangıç komutu repodaki `railway.toml` ile **`python -m astro_bot`** olarak ayarlanır; farklı bir şey yazma.
 4. Deploy tamamlanınca loglarda `Polling başlatılıyor` benzeri satırları görmelisin; Telegram’da bota yazarak dene.
 
@@ -104,6 +110,7 @@ telegram-astro-bot/
 │   │   ├── commands.py
 │   │   ├── callbacks.py
 │   │   ├── keyboards.py
+│   │   ├── persistence.py
 │   │   └── messages.py
 │   └── services/
 │       ├── faq_service.py
@@ -132,7 +139,7 @@ telegram-astro-bot/
 
 Her kayıt için önerilen alanlar:
 
-- `id`, `category`, `title`, `triggers`, `answer`
+- `id`, `category`, `title`, `triggers`, `answer`, isteğe bağlı `answer_en` (İngilizce SSS)
 
 ## Notlar
 

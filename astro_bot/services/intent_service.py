@@ -8,10 +8,32 @@ from typing import Literal
 Intent = Literal["info", "horoscope", "joke", "chat", "other"]
 
 
+def _looks_like_astro_question(t: str, lang: str) -> bool:
+    """Selam + astro sorusu karışıklığını azaltır: içerik astro gibiyse bilgi modu."""
+    if lang == "en":
+        return bool(
+            re.search(
+                r"\b(ascendant|zodiac|astrology|planet|natal|birth chart|retrograde|transit|houses|elements|sun sign|moon sign|rising sign)\b",
+                t,
+                re.I,
+            )
+        )
+    return bool(
+        re.search(
+            r"\b(yükselen|burç|astroloji|gezegen|doğum haritası|harita|transit|retro|evler|element|zodyak|natal|asc\b|ay burcu|güneş burcu)\b",
+            t,
+            re.I,
+        )
+    )
+
+
 def classify_intent(text: str, lang: str) -> Intent:
     t = text.lower().strip()
     if not t:
         return "other"
+
+    if _looks_like_astro_question(t, lang):
+        return "info"
 
     if lang == "en":
         if re.search(
