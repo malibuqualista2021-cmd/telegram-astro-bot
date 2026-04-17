@@ -122,9 +122,10 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Conversation mode: horary (question chart). A snapshot for the exact message time (UTC) and location "
-                "is appended below—use it only as symbolic classical-style context. "
-                "No definitive yes/no predictions; refuse legal/medical/financial verdicts; no automated receptions/void Moon."
+                "Conversation mode: horary. A full chart-data block (houses Placidus or whole-sign fallback, Asc ruler, major aspects) "
+                "is in the system message—your answer MUST interpret that data in a coherent narrative. "
+                "Forbidden: generic pop Sun-sign boilerplate not tied to those placements. "
+                "Use symbolic, conditional language; no legal/medical/financial verdicts."
             )
     else:
         if mode == "info":
@@ -149,9 +150,10 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Konuşma modu: horary (soru haritası). Aşağıda bu mesajın gönderildiği ana (UTC) ve konuma göre anlık harita özeti var; "
-                "yalnızca sembolik geleneksel çerçevede kullan. Kesin kehanet veya net evet/hayır yok; "
-                "hukuki/tıbbi/finansal hüküm verme; resepsiyon/Ay boşluğu vb. burada otomatik hesaplanmaz."
+                "Konuşma modu: horary. Sistem mesajında evler (Placidus veya tam burç yedek), yükselen yöneticisi ve majör açılar var; "
+                "yanıtın BUNLARI sentezleyerek bir bütün olarak yorumlanmalı. "
+                "Yasak: o veriye bağlanmadan internetteki gibi düz Güneş burcu kişilik metni. "
+                "Sembolik ve koşullu dil kullan; hukuki/tıbbi/finansal kesin hüküm yok."
             )
     return ""
 

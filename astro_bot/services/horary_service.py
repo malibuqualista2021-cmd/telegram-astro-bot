@@ -1,4 +1,4 @@
-"""Horary (soru anı) — eğitim amaçlı; soru geldiği Telegram mesajının UTC zamanı + konum."""
+"""Horary (soru anı) — soru geldiği Telegram mesajının UTC zamanı + konum; evler, yönetici, açılar."""
 
 from __future__ import annotations
 
@@ -16,6 +16,24 @@ from astro_bot.services.chart_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Klasik yükselen burç yöneticisi (modern gezegen yok)
+_SIGN_RULER_EN = (
+    "Mars",
+    "Venus",
+    "Mercury",
+    "Moon",
+    "Sun",
+    "Mercury",
+    "Venus",
+    "Mars",
+    "Jupiter",
+    "Saturn",
+    "Saturn",
+    "Jupiter",
+)
+
+_PLANET_KEYS = ("Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn")
 
 
 def _sign_idx(lon_deg: float) -> int:
@@ -35,11 +53,57 @@ def _planet_lon_ephem(dt_utc: datetime, lat_deg: float, lon_deg: float, name: st
     return _tropical_longitude_ephem(body, obs)
 
 
+def _house_placidus(lon: float, cusps_1_12: list[float]) -> int:
+    """cusps[i] = i. ev başlangıcı (1..12)."""
+    lon = lon % 360
+    c = [cusps_1_12[i] % 360 for i in range(12)]
+    for i in range(12):
+        a, b = c[i], c[(i + 1) % 12]
+        if a <= b:
+            if a <= lon < b or (i == 11 and abs(lon - b) < 1e-9):
+                return i + 1
+        else:
+            if lon >= a or lon < b:
+                return i + 1
+    return 1
+
+
+def _house_whole_sign(planet_lon: float, asc_lon: float) -> int:
+    p = _sign_idx(planet_lon)
+    a = _sign_idx(asc_lon)
+    return (p - a) % 12 + 1
+
+
+def _aspect_pairs(lons: dict[str, float], orb: float = 7.0) -> list[tuple[str, str, str, float]]:
+    """Majör açılar: kavuşum, karşıt, kare, üçgen, altılı."""
+    keys = [k for k in _PLANET_KEYS if k in lons]
+    out: list[tuple[str, str, str, float]] = []
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            a, b = keys[i], keys[j]
+            d = abs(lons[a] - lons[b]) % 360
+            sep = min(d, 360 - d)
+            label = ""
+            if sep <= orb:
+                label = "conjunction"
+            elif abs(sep - 180) <= orb:
+                label = "opposition"
+            elif abs(sep - 90) <= orb:
+                label = "square"
+            elif abs(sep - 120) <= orb:
+                label = "trine"
+            elif abs(sep - 60) <= orb:
+                label = "sextile"
+            if label:
+                out.append((a, b, label, sep))
+    return sorted(out, key=lambda x: x[3])
+
+
 def _horary_swisseph(
     dt_utc: datetime,
     lat_deg: float,
     lon_deg: float,
-) -> tuple[dict[str, float], float, float, str] | None:
+) -> tuple[dict[str, float], float, float, str, list[float] | None] | None:
     try:
         import swisseph as swe
     except ImportError:
@@ -69,10 +133,11 @@ def _horary_swisseph(
         for label, pid in pairs:
             xx, _ = swe.calc_ut(jd, pid, flg)
             lons[label] = float(xx[0]) % 360
-        _cusps, ascmc = swe.houses(jd, lat_deg, lon_deg, b"P")
+        cusps, ascmc = swe.houses(jd, lat_deg, lon_deg, b"P")
         asc = float(ascmc[0]) % 360
         mc = float(ascmc[1]) % 360
-        return lons, asc, mc, "Swiss Ephemeris"
+        c12 = [float(cusps[i]) for i in range(1, 13)]
+        return lons, asc, mc, "Swiss Ephemeris (Placidus)", c12
     except Exception:
         logger.exception("Horary Swiss hesap hatası")
         return None
@@ -82,7 +147,7 @@ def _horary_ephem_fallback(
     dt_utc: datetime,
     lat_deg: float,
     lon_deg: float,
-) -> tuple[dict[str, float], float, float, str]:
+) -> tuple[dict[str, float], float, float, str, None]:
     lon_sun, lon_moon, lon_asc = _positions_ephem(dt_utc, lat_deg, lon_deg)
     lons = {
         "Sun": lon_sun,
@@ -105,7 +170,7 @@ def _horary_ephem_fallback(
     ramc_deg = math.degrees(lst_rad) % 360
     lat_rad = float(obs.lat) * 180.0 / math.pi
     mc_approx = _ascendant_deg(ramc_deg, lat_rad)
-    return lons, lon_asc, mc_approx, "ephem (yaklaşık)"
+    return lons, lon_asc, mc_approx, "ephem (whole-sign houses from Asc)", None
 
 
 def format_horary_context(
@@ -116,7 +181,7 @@ def format_horary_context(
     *,
     used_custom_location: bool,
 ) -> str:
-    """LLM sistemine eklenecek düz metin: soru anı haritası özeti + uyarılar."""
+    """LLM: haritaya özgü ev, yönetici, açılar + yorum talimatı (genel burç metni yasak)."""
     try:
         q = question_utc.astimezone(timezone.utc)
     except Exception:
@@ -125,57 +190,115 @@ def format_horary_context(
 
     pack = _horary_swisseph(q, lat_deg, lon_deg)
     if pack is None:
-        lons, asc, mc, src = _horary_ephem_fallback(q, lat_deg, lon_deg)
+        lons, asc, mc, src, cusps = _horary_ephem_fallback(q, lat_deg, lon_deg)
     else:
-        lons, asc, mc, src = pack
+        lons, asc, mc, src, cusps = pack
 
-    order = ("Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn")
+    asc_idx = _sign_idx(asc)
+    ruler_name = _SIGN_RULER_EN[asc_idx]
+    ruler_lon = lons.get(ruler_name)
+    if ruler_lon is None:
+        ruler_name = "Mercury"
+        ruler_lon = lons["Mercury"]
+
+    labels_tr = {
+        "Sun": "Güneş",
+        "Moon": "Ay",
+        "Mercury": "Merkür",
+        "Venus": "Venüs",
+        "Mars": "Mars",
+        "Jupiter": "Jüpiter",
+        "Saturn": "Satürn",
+    }
+    asp_tr = {
+        "conjunction": "kavuşum",
+        "opposition": "karşıt",
+        "square": "kare",
+        "trine": "üçgen",
+        "sextile": "altılı",
+    }
+
+    house_lines: list[str] = []
+    for key in _PLANET_KEYS:
+        lon = lons[key]
+        if cusps is not None:
+            hn = _house_placidus(lon, cusps)
+            hnote = f"ev {hn} (Placidus)"
+        else:
+            hn = _house_whole_sign(lon, asc)
+            hnote = f"ev {hn} (Yükselen’e göre tam burç)"
+        if lang == "en":
+            house_lines.append(f"{key}: {sign_name(_sign_idx(lon), lang)} ~{lon:.1f}°, {hnote}")
+        else:
+            house_lines.append(f"{labels_tr[key]}: {sign_name(_sign_idx(lon), lang)} ~{lon:.1f}°, {hnote}")
+
+    aspects = _aspect_pairs(lons)
+    asp_lines: list[str] = []
+    for p1, p2, kind, sep in aspects[:14]:
+        if lang == "en":
+            asp_lines.append(f"{p1}–{p2}: {kind} (~{sep:.1f}°)")
+        else:
+            asp_lines.append(f"{labels_tr.get(p1, p1)}–{labels_tr.get(p2, p2)}: {asp_tr.get(kind, kind)} (~{sep:.1f}°)")
+
+    rh = _house_placidus(ruler_lon, cusps) if cusps is not None else _house_whole_sign(ruler_lon, asc)
+    if lang == "en":
+        ruler_line = (
+            f"Ascendant ruler (traditional): {ruler_name} in {sign_name(_sign_idx(ruler_lon), lang)} "
+            f"~{ruler_lon:.1f}°, house {rh}."
+        )
+    else:
+        ruler_line = (
+            f"Yükselen yöneticisi (klasik): {labels_tr.get(ruler_name, ruler_name)} → "
+            f"{sign_name(_sign_idx(ruler_lon), lang)} ~{ruler_lon:.1f}°, {rh}. ev."
+        )
+
     lines: list[str] = []
     if lang == "en":
-        lines.append("=== Horary snapshot (educational, not a verdict) ===")
-        lines.append(f"Engine: {src}. Chart for the moment this message was sent (UTC).")
+        lines.append("=== Horary chart data (interpret THIS, not generic Sun-sign text) ===")
+        lines.append(f"Engine / houses: {src}. Question time = when this Telegram message was sent (UTC).")
         lines.append(
             f"Location: lat {lat_deg:.4f}, lon {lon_deg:.4f}"
-            + (" (from your saved /konum)." if used_custom_location else " (default Istanbul until you set /konum).")
+            + (" (saved /konum)." if used_custom_location else " (default Istanbul if /konum not set).")
         )
-        lines.append(f"Time (UTC): {q.isoformat()}")
-        for key in order:
-            lon = lons[key]
-            lines.append(f"{key}: {sign_name(_sign_idx(lon), lang)} (~{lon:.1f}°)")
-        lines.append(f"Ascendant: {sign_name(_sign_idx(asc), lang)} (~{asc:.1f}°)")
-        lines.append(f"MC (approx.): {sign_name(_sign_idx(mc), lang)} (~{mc:.1f}°)")
+        lines.append(f"UTC: {q.isoformat()}")
+        lines.append(f"Asc ~{asc:.1f}° ({sign_name(asc_idx, lang)}), MC ~{mc:.1f}° ({sign_name(_sign_idx(mc), lang)}).")
+        lines.append(ruler_line)
+        lines.append("Planet longitudes & houses:")
+        lines.extend(house_lines)
+        if asp_lines:
+            lines.append("Major aspects (orb ~7°):")
+            lines.extend(asp_lines)
         lines.append(
-            "Use this as symbolic classical-horary-style context only. "
-            "Do not give a definitive yes/no on legal, medical, financial, or safety matters. "
-            "No fortune-telling certainties; describe tensions/themes briefly. "
-            "Full horary rules (receptions, aspects, Moon void, etc.) are not automated here—mention if relevant."
+            "INTERPRETATION RULES: You MUST synthesize an answer from the houses, Asc ruler, Moon condition, "
+            "and aspects above. FORBIDDEN: generic pop-astrology paragraphs about Sun signs alone "
+            "(e.g. ‘As an Aries you are…’) unless you explicitly tie them to this chart’s placements. "
+            "Give a coherent horary-style reading: tensions, supports, and symbolic ‘lean’ of the question—"
+            "use conditional language (‘suggests’, ‘may point toward’), not fate. "
+            "No legal/medical/financial verdicts."
         )
     else:
-        lines.append("=== Horary anlık görünüm (eğitim amaçlı, hüküm değil) ===")
-        labels_tr = {
-            "Sun": "Güneş",
-            "Moon": "Ay",
-            "Mercury": "Merkür",
-            "Venus": "Venüs",
-            "Mars": "Mars",
-            "Jupiter": "Jüpiter",
-            "Saturn": "Satürn",
-        }
-        lines.append(f"Hesap: {src}. Harita, bu Telegram mesajının gönderildiği ana (UTC) göre.")
+        lines.append("=== Horary harita verisi (yorumu BUNA dayandır; hazır burç kalıbı kullanma) ===")
+        lines.append(f"Hesap / evler: {src}. Soru anı = bu Telegram mesajının gönderildiği zaman (UTC).")
         lines.append(
             f"Konum: enlem {lat_deg:.4f}, boylam {lon_deg:.4f}"
-            + (" (/konum ile kayıtlı)." if used_custom_location else " (/konum yoksa varsayılan İstanbul).")
+            + (" (/konum kayıtlı)." if used_custom_location else " (/konum yoksa varsayılan İstanbul).")
         )
-        lines.append(f"Zaman (UTC): {q.isoformat()}")
-        for key in order:
-            lon = lons[key]
-            lines.append(f"{labels_tr[key]}: {sign_name(_sign_idx(lon), lang)} (~{lon:.1f}°)")
-        lines.append(f"Yükselen: {sign_name(_sign_idx(asc), lang)} (~{asc:.1f}°)")
-        lines.append(f"MC (yaklaşık): {sign_name(_sign_idx(mc), lang)} (~{mc:.1f}°)")
+        lines.append(f"UTC: {q.isoformat()}")
         lines.append(
-            "Bunu yalnızca geleneksel horary dilinde sembolik bağlam olarak kullan. "
-            "Hukuki/tıbbi/finansal/güvenlik konularında kesin evet/hayır verme; kehanet iddiası yok. "
-            "Tam horary kuralları (resepsiyon, açılar, Ay boşluğu vb.) otomatik değil; gerekirse kısaca belirt."
+            f"Yükselen ~{asc:.1f}° ({sign_name(asc_idx, lang)}), MC ~{mc:.1f}° ({sign_name(_sign_idx(mc), lang)})."
+        )
+        lines.append(ruler_line)
+        lines.append("Gezegenler ve evler:")
+        lines.extend(house_lines)
+        if asp_lines:
+            lines.append("Öne çıkan majör açılar (~7° orb):")
+            lines.extend(asp_lines)
+        lines.append(
+            "YORUM KURALLARI: Yanıtını mutlaka yukarıdaki ev yerleşimleri, yükselen yöneticisi, Ay ve açılar "
+            "üzerinden sentezle. YASAK: İnternetteki gibi yalnızca Güneş burcu genel kişilik metni "
+            "(ör. ‘Koçsun, cesursun…’) — böyle yazacaksan bu haritadaki hangi unsur bunu destekliyor diye bağla. "
+            "Horary üslubu: çekimler, gerilimler, sembolik ‘eğilim’; koşullu anlat (‘işaret edebilir’, ‘tema şu yönde olabilir’). "
+            "Hukuki/tıbbi/finansal kesin hüküm yok."
         )
 
     return "\n".join(lines)

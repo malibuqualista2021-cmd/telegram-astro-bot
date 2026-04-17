@@ -100,14 +100,26 @@ class LlmAstrologyService:
             parts.append(profile_hint)
         hc = (horary_context or "").strip()
         if hc:
-            parts.append(hc[:6000])
+            parts.append(hc[:9000])
         if memory_summary.strip():
             prefix = "Conversation summary so far:\n" if lang == "en" else "Şu ana kadar özet:\n"
             parts.append(prefix + memory_summary.strip()[:3500])
         return "\n\n".join(parts)
 
-    def _user_suffix(self, lang: str) -> str:
-        return USER_SUFFIX_EN if lang == "en" else USER_SUFFIX_TR
+    def _user_suffix(self, lang: str, *, horary: bool = False) -> str:
+        base = USER_SUFFIX_EN if lang == "en" else USER_SUFFIX_TR
+        if horary:
+            if lang == "en":
+                base += (
+                    "\n\nHorary: your answer must use the chart data from the system message (houses, ruler, aspects). "
+                    "Do not reply with generic Sun-sign personality text unrelated to that chart."
+                )
+            else:
+                base += (
+                    "\n\nHorary: yanıtını sistemdeki harita verisine (evler, yönetici, açılar) dayandır; "
+                    "o haritayla bağlantısı olmayan hazır Güneş burcu metni yazma."
+                )
+        return base
 
     async def summarize_chunk(
         self,
@@ -217,7 +229,8 @@ class LlmAstrologyService:
             normalize_chat_mode(chat_mode),
             horary_context=horary_context,
         )
-        suffix = self._user_suffix(lang)
+        is_horary = normalize_chat_mode(chat_mode) == "horary" and bool((horary_context or "").strip())
+        suffix = self._user_suffix(lang, horary=is_horary)
 
         if self._provider == "gemini":
             return await self._reply_gemini(text, history, system, suffix, lang)
