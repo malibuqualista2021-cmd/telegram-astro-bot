@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-ChatMode = Literal["default", "info", "daily", "chatty", "chart"]
+ChatMode = Literal["default", "info", "daily", "chatty", "chart", "horary"]
 
-_MODE_ORDER: tuple[ChatMode, ...] = ("default", "info", "daily", "chatty", "chart")
+_MODE_ORDER: tuple[ChatMode, ...] = ("default", "info", "daily", "chatty", "chart", "horary")
 
 # (regex with re.I, mode) — uzun eşleşmeler önce denenir
 _PATTERNS_TR: list[tuple[re.Pattern[str], ChatMode]] = [
@@ -31,6 +31,10 @@ _PATTERNS_TR: list[tuple[re.Pattern[str], ChatMode]] = [
     (re.compile(r"\bharitam(?:a|ı)?\s+göre\b", re.I), "chart"),
     (re.compile(r"\bprofilime\s+göre\b", re.I), "chart"),
     (re.compile(r"\bnatal(?:e)?\s+haritam(?:a|ı)?\s+göre\b", re.I), "chart"),
+    (re.compile(r"\bhorary\b", re.I), "horary"),
+    (re.compile(r"\bsaat\s+astrolojisi(?:\s+modu)?\b", re.I), "horary"),
+    (re.compile(r"\bsoru\s+haritası(?:\s+modu)?\b", re.I), "horary"),
+    (re.compile(r"\bsoru\s+anı\s+haritası\b", re.I), "horary"),
 ]
 
 _PATTERNS_EN: list[tuple[re.Pattern[str], ChatMode]] = [
@@ -47,6 +51,9 @@ _PATTERNS_EN: list[tuple[re.Pattern[str], ChatMode]] = [
     (re.compile(r"\bbased\s+on\s+my\s+(?:birth\s+)?chart\b", re.I), "chart"),
     (re.compile(r"\busing\s+my\s+profile\b", re.I), "chart"),
     (re.compile(r"\bnatal\s+chart\s+context\b", re.I), "chart"),
+    (re.compile(r"\bhorary\b", re.I), "horary"),
+    (re.compile(r"\bhorary\s+astrology\b", re.I), "horary"),
+    (re.compile(r"\bquestion\s+chart\s+mode\b", re.I), "horary"),
 ]
 
 
@@ -113,6 +120,12 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
                 "Conversation mode: prioritize the user's birth chart context when profile data was provided above; "
                 "if data is missing, answer generally and gently note that time/place improves chart-based replies."
             )
+        if mode == "horary":
+            return (
+                "Conversation mode: horary (question chart). A snapshot for the exact message time (UTC) and location "
+                "is appended below—use it only as symbolic classical-style context. "
+                "No definitive yes/no predictions; refuse legal/medical/financial verdicts; no automated receptions/void Moon."
+            )
     else:
         if mode == "info":
             return (
@@ -134,6 +147,12 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
                 "Konuşma modu: doğum haritası / profil öncelikli. Yukarıda verilen doğum bilgisi bağlamını önce düşün; "
                 "bilgi yoksa genel cevap ver ve tam yorum için tarih/saat/yer gerektiğini nazikçe belirt."
             )
+        if mode == "horary":
+            return (
+                "Konuşma modu: horary (soru haritası). Aşağıda bu mesajın gönderildiği ana (UTC) ve konuma göre anlık harita özeti var; "
+                "yalnızca sembolik geleneksel çerçevede kullan. Kesin kehanet veya net evet/hayır yok; "
+                "hukuki/tıbbi/finansal hüküm verme; resepsiyon/Ay boşluğu vb. burada otomatik hesaplanmaz."
+            )
     return ""
 
 
@@ -146,6 +165,7 @@ def mode_ack_message(mode: ChatMode, lang: str) -> str:
             "daily": "short symbolic daily-style themes",
             "chatty": "warmer, more conversational",
             "chart": "using your chart / profile context when available",
+            "horary": "horary-style replies using the chart for each message’s time (UTC)",
         }
         return (
             f"Got it — I'll answer in {hints[mode]} from now on. "
@@ -157,6 +177,7 @@ def mode_ack_message(mode: ChatMode, lang: str) -> str:
         "daily": "kısa, sembolik günlük tema tarzı",
         "chatty": "daha samimi sohbet tonu",
         "chart": "mümkünse doğum / harita bağlamını öne çıkararak",
+        "horary": "her mesajın gönderildiği ana göre soru haritası (horary) çerçevesinde",
     }
     return (
         f"Tamam — bundan sonra yanıtlarım {hints_tr[mode]} olacak. "

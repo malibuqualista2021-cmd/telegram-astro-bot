@@ -86,6 +86,7 @@ class LlmAstrologyService:
         memory_summary: str,
         intent: Intent,
         chat_mode: ChatMode,
+        horary_context: str = "",
     ) -> str:
         base = SYSTEM_PROMPT_EN if lang == "en" else SYSTEM_PROMPT_TR
         parts = [base]
@@ -97,6 +98,9 @@ class LlmAstrologyService:
             parts.append(mh)
         if profile_hint:
             parts.append(profile_hint)
+        hc = (horary_context or "").strip()
+        if hc:
+            parts.append(hc[:6000])
         if memory_summary.strip():
             prefix = "Conversation summary so far:\n" if lang == "en" else "Şu ana kadar özet:\n"
             parts.append(prefix + memory_summary.strip()[:3500])
@@ -197,6 +201,7 @@ class LlmAstrologyService:
         memory_summary: str = "",
         intent: Intent = "info",
         chat_mode: ChatMode = "default",
+        horary_context: str = "",
     ) -> str:
         text = (user_message or "").strip()
         if not text:
@@ -210,6 +215,7 @@ class LlmAstrologyService:
             memory_summary,
             intent,
             normalize_chat_mode(chat_mode),
+            horary_context=horary_context,
         )
         suffix = self._user_suffix(lang)
 

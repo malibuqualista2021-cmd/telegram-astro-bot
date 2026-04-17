@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timezone
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -18,6 +19,7 @@ from astro_bot.services.conversation_mode import (
     parse_chat_mode_phrases,
 )
 from astro_bot.services.faq_service import FaqService
+from astro_bot.services.horary_service import format_horary_context, user_has_saved_coordinates
 from astro_bot.services.intent_service import classify_intent
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.memory_service import should_summarize, split_for_summarize
@@ -132,6 +134,21 @@ async def _process_free_text(
     intent = classify_intent(text, lang)
     mem = (context.user_data.get("memory_summary") or "").strip()
 
+    horary_context = ""
+    if chat_mode == "horary" and update.effective_message:
+        msg_dt = update.effective_message.date
+        if msg_dt.tzinfo is None:
+            msg_dt = msg_dt.replace(tzinfo=timezone.utc)
+        else:
+            msg_dt = msg_dt.astimezone(timezone.utc)
+        horary_context = format_horary_context(
+            msg_dt,
+            profile.lat,
+            profile.lon,
+            lang,
+            used_custom_location=user_has_saved_coordinates(context.user_data),
+        )
+
     reply = await llm_svc.reply(
         text,
         history=history,
@@ -140,6 +157,7 @@ async def _process_free_text(
         memory_summary=mem,
         intent=intent,
         chat_mode=chat_mode,
+        horary_context=horary_context,
     )
 
     await update.message.reply_text(reply, reply_markup=_feedback_keyboard())

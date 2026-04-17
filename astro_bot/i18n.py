@@ -37,7 +37,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/burclar — 12 burç tarihleri\n"
             "/hakkinda — Sorumluluk reddi\n\n"
             "Serbest metin: önce SSS, sonra LLM. Profil doluysa yanıtlar bağlama eklenir.\n"
-            "Üslup: düz yazıyla iste (ör. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre») — ayrı komut yok.\n\n"
+            "Üslup: düz yazıyla iste (ör. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre», «horary» / «saat astrolojisi») — ayrı komut yok.\n\n"
             "<b>Önemli</b>\n"
             "• Genel bilgi; kesin kehanet yok.\n"
             "• Tıbbi/hukuki/finansal tavsiye yok.\n"
@@ -87,7 +87,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/harita — Sun/Moon/Asc (educational, ephem)\n"
             "/sss — FAQ\n/burclar — Sign date ranges\n/hakkinda — Disclaimer\n\n"
             "Free text: FAQ first, then LLM. If a profile exists, replies include that context.\n"
-            "Tone: say it in plain words (e.g. “facts only”, “chatty”, “daily horoscope style”, “based on my chart”) — no extra command.\n\n"
+            "Tone: say it in plain words (e.g. “facts only”, “chatty”, “daily horoscope style”, “based on my chart”, “horary”) — no extra command.\n\n"
             "<b>Notes</b>\n• General info only.\n• No medical/legal/financial advice.\n"
         ),
         "menu": "<b>Main menu</b>\n\nPick a shortcut or type a message.",

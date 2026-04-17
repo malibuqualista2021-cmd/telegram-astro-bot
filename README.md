@@ -12,7 +12,8 @@
 - **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
 - **Inline menü:** SSS kategorileri, burç listesi, yardım, hakkında (düğmelerle gezinme)
 - **Serbest metin:** Önce `knowledge/faq.json` (alt dize + **rapidfuzz** bulanık eşleşme), yoksa seçilen LLM
-- **Sohbet üslubu (komutsuz):** Düz yazıyla örn. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre» — kalıcı mod; özel sohbette `chat_mode` veritabanında saklanır
+- **Sohbet üslubu (komutsuz):** Düz yazıyla örn. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre», «horary» / «saat astrolojisi» — kalıcı mod; özel sohbette `chat_mode` veritabanında saklanır
+- **Horary (eğitim):** «horary» modundayken her LLM yanıtında sorunun sorulduğu Telegram mesajının UTC zamanı + konum (`/konum` veya varsayılan) ile anlık harita özeti modele eklenir; otomatik klasik horary hükümü yok
 - **Bağlam:** Son birkaç tur sohbet modele özet bağlam olarak gider (`CONVERSATION_MAX_TURNS`)
 - **Spam önleme:** Sohbet başına dakikalık hız sınırı (`RATE_LIMIT_PER_MINUTE`)
 - **UX:** Yanıt üretilirken “yazıyor…” göstergesi
@@ -120,6 +121,7 @@ telegram-astro-bot/
 │       ├── llm_service.py
 │       ├── profile_service.py
 │       ├── chart_service.py
+│       ├── horary_service.py
 │       ├── intent_service.py
 │       ├── memory_service.py
 │       ├── feedback_store.py

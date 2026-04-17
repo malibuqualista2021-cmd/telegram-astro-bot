@@ -143,6 +143,14 @@
       "triggers": ["senkronisite", "jung astroloji"],
       "answer": "Bazı yaklaşımlar astrolojiyi sembolik paralellikler (senkronisite) çerçevesinde ele alır. Bu felsefi bir çerçevedir; bilimsel kanıt yerine anlam üretme dili olarak konumlanır.",
       "answer_en": "Some approaches frame astrology through meaningful coincidence (synchronicity). That is a philosophical stance—meaning-making rather than scientific proof."
+    },
+    {
+      "id": "horary_nedir",
+      "category": "ileri",
+      "title": "Horary (saat astrolojisi) nedir?",
+      "triggers": ["horary nedir", "saat astrolojisi nedir", "soru haritası nedir", "soru anı haritası"],
+      "answer": "Horary, belirli bir sorunun sorulduğu an ve yerde çizilen haritaya dayanan geleneksel bir astroloji dalıdır. Bu botta yalnızca eğitim amaçlıdır: sorunun Telegram’da yazıldığı mesajın UTC zamanı ve seçilen konumla basit bir gökyüzü özeti üretilir; klasik horary’deki tüm kurallar (resepsiyon, Ay boşluğu, sigifikatörler vb.) otomatik uygulanmaz ve kesin evet/hayır kehaneti verilmez.",
+      "answer_en": "Horary is a branch of astrology that works with the chart cast for the time (and place) a question is asked. In this bot it is educational only: a simple sky snapshot uses the UTC time of your Telegram message and your chosen location; full classical horary rules are not automated and no definitive yes/no fortune-telling is given."
     }
   ]
 }
