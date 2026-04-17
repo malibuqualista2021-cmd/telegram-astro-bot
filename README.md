@@ -6,7 +6,7 @@
 
 - **Komutlar:** `/start`, `/help`, `/menu`, `/lang`, `/profil`, `/dogum`, `/saat`, `/konum`, `/harita`, `/sss`, `/burclar`, `/hakkinda`
 - **Kişisel profil:** doğum tarihi/saati ve konum (enlem/boylam); LLM yanıtlarına yumuşak bağlam olarak eklenir
-- **Eğitim amaçlı harita özeti:** `ephem` ile Güneş/Ay/Yükselen (yaklaşık; `/harita`)
+- **Eğitim amaçlı harita özeti:** Mümkünse **Swiss Ephemeris** (`pyswisseph`), yoksa `ephem` ile Güneş/Ay/Yükselen (yaklaşık; `/harita`)
 - **Niyet:** bilgi / günlük-fal tarzı / şaka — yanıt tonu için ipuçları
 - **Özet hafıza:** uzun sohbette eski kısım LLM ile özetlenir (`MEMORY_SUMMARIZE_AT_MSGS`)
 - **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
@@ -19,8 +19,10 @@
 - **Loglama:** Konsol + yedeklemeli günlük dosyası (`logs/astro_bot.log`)
 - **Uçtan uca çalışma:** **Long polling** (Railway veya kendi sunucunda süreç olarak çalışır; ayrı web sunucusu gerekmez)
 - **Kalıcı veri (özel sohbet):** `data/bot_state.db` (SQLite) veya **`DATABASE_URL`** ile PostgreSQL — dil, profil, sohbet özeti; süreç yeniden başlasa da kalır (Railway’de kalıcılık için Postgres önerilir)
-- **Özel sohbet:** Serbest metin yanıtları yalnızca **birebir sohbette** (grupta metinle LLM kapalı; maliyet/spam riski)
-- **SSS çevirisi:** `faq.json` içinde isteğe bağlı `answer_en` — `/lang en` iken kullanılır
+- **Özel sohbet:** Serbest metin (SSS → LLM) birebir sohbette her mesajda
+- **Gruplar:** Metinle yanıt yalnızca mesajda **`@botkullaniciadi`** geçtiğinde (mention sonrası kalan metin işlenir; maliyet kontrolü)
+- **Geri bildirim:** LLM yanıtının altında 👍/👎 — kayıt `data/analytics.db` (SQLite)
+- **SSS çevirisi:** `faq.json` içinde `answer_en` — `/lang en` iken kullanılır
 - **Girdi sınırı:** `MAX_USER_MESSAGE_CHARS` ile mesaj kırpma (token/maliyet)
 - **İzleme:** İsteğe bağlı **`SENTRY_DSN`**
 
@@ -119,6 +121,7 @@ telegram-astro-bot/
 │       ├── chart_service.py
 │       ├── intent_service.py
 │       ├── memory_service.py
+│       ├── feedback_store.py
 │       └── rate_limit.py
 ├── knowledge/
 │   └── faq.json

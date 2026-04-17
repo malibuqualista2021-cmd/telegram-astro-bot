@@ -32,6 +32,7 @@ from astro_bot.handlers.commands import register_command_handlers
 from astro_bot.handlers.messages import register_message_handlers
 from astro_bot.handlers.persistence import register_persistence_handlers
 from astro_bot.services.faq_service import FaqService
+from astro_bot.services.feedback_store import create_feedback_store
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.rate_limit import ChatRateLimiter
 from astro_bot.services.user_store import create_user_store
@@ -60,6 +61,15 @@ def setup_logging() -> None:
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telegram").setLevel(logging.INFO)
+
+
+async def post_init(application: Application) -> None:
+    me = await application.bot.get_me()
+    application.bot_data["bot_username"] = (me.username or "").lower()
+    logging.getLogger(__name__).info(
+        "Bot kullanıcı adı: @%s",
+        application.bot_data["bot_username"] or "?",
+    )
 
 
 def init_sentry() -> None:
@@ -102,11 +112,13 @@ def main() -> None:
     rate_limiter = ChatRateLimiter(resolved_rate_limit_per_minute())
     turns = resolved_conversation_turns()
     user_store = create_user_store(PROJECT_ROOT)
+    feedback_store = create_feedback_store(PROJECT_ROOT)
 
     application = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)
         .concurrent_updates(True)
+        .post_init(post_init)
         .build()
     )
     application.bot_data["faq"] = faq
@@ -116,6 +128,7 @@ def main() -> None:
     application.bot_data["memory_threshold_msgs"] = settings.MEMORY_SUMMARIZE_AT_MSGS
     application.bot_data["memory_keep_pairs"] = settings.MEMORY_KEEP_PAIRS
     application.bot_data["user_store"] = user_store
+    application.bot_data["feedback_store"] = feedback_store
     application.bot_data["max_user_message_chars"] = resolved_max_user_message_chars()
 
     register_persistence_handlers(application)

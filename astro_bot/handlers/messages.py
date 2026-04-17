@@ -1,11 +1,12 @@
-"""Serbest metin mesajları."""
+"""Serbest metin mesajları (özel sohbet + grupta mention)."""
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
@@ -29,11 +30,25 @@ def _trim_history(
     return history[-max_msgs:]
 
 
-async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.text:
+def _feedback_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("👍", callback_data="fb:1"),
+                InlineKeyboardButton("👎", callback_data="fb:0"),
+            ]
+        ]
+    )
+
+
+async def _process_free_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+) -> None:
+    if not update.message:
         return
 
-    text = update.message.text.strip()
     max_c = context.bot_data.get(
         "max_user_message_chars",
         settings.MAX_USER_MESSAGE_CHARS,
@@ -97,7 +112,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         intent=intent,
     )
 
-    await update.message.reply_text(reply)
+    await update.message.reply_text(reply, reply_markup=_feedback_keyboard())
     logger.info("Yanıt kaynağı=LLM chat_id=%s intent=%s", chat_id, intent)
 
     new_hist = list(context.user_data.get("chat_history") or [])
@@ -106,10 +121,49 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     context.user_data["chat_history"] = _trim_history(new_hist, max_turns)
 
 
+async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.text:
+        return
+    await _process_free_text(update, context, update.message.text.strip())
+
+
+def _strip_bot_mention(text: str, bot_username: str) -> str:
+    if not bot_username:
+        return text
+    pat = rf"@?{re.escape(bot_username)}\s*"
+    return re.sub(pat, "", text, count=1, flags=re.IGNORECASE).strip()
+
+
+async def group_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.text:
+        return
+    bot_username = (context.bot_data.get("bot_username") or "").strip().lower()
+    if not bot_username:
+        return
+    raw = update.message.text
+    if f"@{bot_username}" not in raw.lower():
+        return
+    clean = _strip_bot_mention(raw.strip(), bot_username)
+    if not clean:
+        await update.message.reply_text(
+            "Astroloji sorusunu @bot ile birlikte yazabilirsin."
+            if get_lang(context.user_data.get("lang")) == "tr"
+            else "Write your astrology question next to @bot."
+        )
+        return
+    await _process_free_text(update, context, clean)
+
+
 def register_message_handlers(application: Application) -> None:
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
             text_message,
+        )
+    )
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
+            group_text_message,
         )
     )

@@ -12,8 +12,23 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 from astro_bot.handlers import keyboards as kb
 from astro_bot.i18n import get_lang, t
 from astro_bot.services.faq_service import FaqService
+from astro_bot.services.feedback_store import FeedbackStore
 
 logger = logging.getLogger(__name__)
+
+
+async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    store: FeedbackStore | None = context.bot_data.get("feedback_store")
+    uid = query.from_user.id if query.from_user else 0
+    cid = query.message.chat_id if query.message else 0
+    helpful = query.data == "fb:1"
+    if store:
+        await store.log(uid, cid, helpful)
+    lang = get_lang(context.user_data.get("lang"))
+    await query.answer("Teşekkürler!" if lang == "tr" else "Thanks!")
 
 
 async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,4 +139,5 @@ async def _edit_or_send(query, context: ContextTypes.DEFAULT_TYPE, text: str, ma
 
 
 def register_callback_handlers(application: Application) -> None:
+    application.add_handler(CallbackQueryHandler(feedback_callback, pattern=r"^fb:[01]$"))
     application.add_handler(CallbackQueryHandler(callback_router, pattern=r"^(menu|cat|faq|static):"))

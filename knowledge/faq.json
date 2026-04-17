@@ -21,112 +21,128 @@
       "category": "temel",
       "title": "Dört element",
       "triggers": ["element nedir", "ateş toprak hava su", "dört element", "element burç"],
-      "answer": "Burçlar dört elemente gruplanır: Ateş (Koç, Aslan, Yay), Toprak (Boğa, Başak, Oğlak), Hava (İkizler, Terazi, Kova), Su (Yengeç, Akrep, Balık). Bu ayrım nitelikleri sembolik olarak tarif etmek içindir; kişiliği tek başına belirlemez."
+      "answer": "Burçlar dört elemente gruplanır: Ateş (Koç, Aslan, Yay), Toprak (Boğa, Başak, Oğlak), Hava (İkizler, Terazi, Kova), Su (Yengeç, Akrep, Balık). Bu ayrım nitelikleri sembolik olarak tarif etmek içindir; kişiliği tek başına belirlemez.",
+      "answer_en": "Signs are grouped into four elements: Fire (Aries, Leo, Sagittarius), Earth (Taurus, Virgo, Capricorn), Air (Gemini, Libra, Aquarius), Water (Cancer, Scorpio, Pisces). This labels qualities in a symbolic way; it does not define personality by itself."
     },
     {
       "id": "modalite",
       "category": "temel",
       "title": "Kardinal, sabit, değişken",
       "triggers": ["kardinal", "sabit burç", "değişken burç", "modalite"],
-      "answer": "Her element grubunda üç modalite vardır: kardinal (başlatma), sabit (sürdürme), değişken (uyarlama). Bu sınıflandırma geleneksel astroloji dilinin parçasıdır; günlük hayatta davranışı tek başına açıklamaz."
+      "answer": "Her element grubunda üç modalite vardır: kardinal (başlatma), sabit (sürdürme), değişken (uyarlama). Bu sınıflandırma geleneksel astroloji dilinin parçasıdır; günlük hayatta davranışı tek başına açıklamaz.",
+      "answer_en": "Within each element there are three modalities: cardinal (initiating), fixed (sustaining), mutable (adapting). This is part of traditional astrological language; it does not explain everyday behavior on its own."
     },
     {
       "id": "yukselen",
       "category": "gezegen_harita",
       "title": "Yükselen (Ascendant)",
       "triggers": ["yükselen nedir", "ascendant", "asc nedir", "doğu ufkunda"],
-      "answer": "Yükselen, doğum anında doğu ufkunda yükselen burçtur. Haritada sıkça 'ilk izlenim' ve yaklaşım tarzı ile ilişkilendirilir. Tam hesap için doğum yeri ve saati gerekir; burada yalnızca genel bilgi verilir."
+      "answer": "Yükselen, doğum anında doğu ufkunda yükselen burçtur. Haritada sıkça 'ilk izlenim' ve yaklaşım tarzı ile ilişkilendirilir. Tam hesap için doğum yeri ve saati gerekir; burada yalnızca genel bilgi verilir.",
+      "answer_en": "The Ascendant is the zodiac sign rising on the eastern horizon at birth. Charts often link it to first impressions and approach style. An exact calculation needs place and time; here we only give general information."
     },
     {
       "id": "gezegen_anlam",
       "category": "gezegen_harita",
       "title": "Gezegenlerin sembolik anlamları",
       "triggers": ["gezegen anlamı", "astrolojide gezegen", "gezegenler ne anlama gelir"],
-      "answer": "Klasik astrolojide gezegenlere sembolik roller verilir: ör. Ay duygular, Merkür iletişim, Venüs ilişkiler ve değerler, Mars eylem ve çatışma, Jüpiter büyüme, Satürn sınırlar ve yapı. Modern gezegenler (Uranüs, Neptün, Plüton) farklı ekollerde farklı vurgulanır. Bu bir kültürel dildir."
+      "answer": "Klasik astrolojide gezegenlere sembolik roller verilir: ör. Ay duygular, Merkür iletişim, Venüs ilişkiler ve değerler, Mars eylem ve çatışma, Jüpiter büyüme, Satürn sınırlar ve yapı. Modern gezegenler (Uranüs, Neptün, Plüton) farklı ekollerde farklı vurgulanır. Bu bir kültürel dildir.",
+      "answer_en": "Classical astrology assigns symbolic roles to planets—for example Moon and feeling, Mercury and communication, Venus and relationships, Mars and action, Jupiter and growth, Saturn and structure. Modern planets are emphasized differently by different schools. This is a cultural language."
     },
     {
       "id": "evler",
       "category": "gezegen_harita",
       "title": "Evler (1–12)",
       "triggers": ["evler nedir", "12 ev", "astroloji evleri", "doğum haritası ev"],
-      "answer": "Harita 12 eve bölünür; yaygın temalar: 1-benlik, 2-kaynaklar, 3-iletişim, 4-aile, 5-yaratıcılık, 6-rutin ve sağlık (genel), 7-ikili ilişkiler, 8-dönüşüm, 9-inanç ve öğrenim, 10-kariyer imajı, 11-gruplar, 12-kapanış. Yorum ev yöneticisi ve gezegen yerleşimine bağlıdır."
+      "answer": "Harita 12 eve bölünür; yaygın temalar: 1-benlik, 2-kaynaklar, 3-iletişim, 4-aile, 5-yaratıcılık, 6-rutin ve sağlık (genel), 7-ikili ilişkiler, 8-dönüşüm, 9-inanç ve öğrenim, 10-kariyer imajı, 11-gruplar, 12-kapanış. Yorum ev yöneticisi ve gezegen yerleşimine bağlıdır.",
+      "answer_en": "The chart is split into 12 houses; common themes: 1-self, 2-resources, 3-communication, 4-home, 5-creativity, 6-routine and health (broadly), 7-partnerships, 8-transformation, 9-belief and learning, 10-public role, 11-groups, 12-closure. Interpretation depends on rulers and placements."
     },
     {
       "id": "harita_nedir",
       "category": "gezegen_harita",
       "title": "Doğum haritası nedir?",
       "triggers": ["doğum haritası nedir", "natal chart", "harita nasıl okunur"],
-      "answer": "Doğum haritası, belirli bir an ve yerde gökyüzünün haritadaki yerleşimidir; burçlar, evler ve açılar birlikte okunur. Kişisel yorum için tarih, yer ve mümkünse saat gerekir; burada genel kavramlar anlatılır."
+      "answer": "Doğum haritası, belirli bir an ve yerde gökyüzünün haritadaki yerleşimidir; burçlar, evler ve açılar birlikte okunur. Kişisel yorum için tarih, yer ve mümkünse saat gerekir; burada genel kavramlar anlatılır.",
+      "answer_en": "A birth chart is a map of the sky at a specific time and place; signs, houses, and aspects are read together. Personal interpretation needs date, place, and ideally time; here we only explain general concepts."
     },
     {
       "id": "retro",
       "category": "ileri",
       "title": "Retrograd nedir?",
       "triggers": ["retro nedir", "retrograd", "geri giden gezegen"],
-      "answer": "Retrograd, yeryüzünden bakınca bir gezegenin geçici olarak geri gidiyormuş gibi görünmesidir (optik illüzyon). Astrolojide bazen içe dönük yeniden değerlendirme temalarıyla anılır; kesin sonuç vaat etmez."
+      "answer": "Retrograd, yeryüzünden bakınca bir gezegenin geçici olarak geri gidiyormuş gibi görünmesidir (optik illüzyon). Astrolojide bazen içe dönük yeniden değerlendirme temalarıyla anılır; kesin sonuç vaat etmez.",
+      "answer_en": "Retrograde motion means a planet temporarily appears to move backward from Earth—an optical effect. Some astrological approaches link it to inward review themes; it does not promise fixed outcomes."
     },
     {
       "id": "transit",
       "category": "ileri",
       "title": "Transit nedir?",
       "triggers": ["transit nedir", "transit astroloji", "gökyüzü transit"],
-      "answer": "Transit, anlık gökyüzünün doğum haritasındaki noktalarla oluşturduğu ilişkilerdir (açılar, gezegen-burç geçişleri). Yorumlar ekoleye göre değişir; olasılık değil sembolik çerçeve sunar."
+      "answer": "Transit, anlık gökyüzünün doğum haritasındaki noktalarla oluşturduğu ilişkilerdir (açılar, gezegen-burç geçişleri). Yorumlar ekoleye göre değişir; olasılık değil sembolik çerçeve sunar.",
+      "answer_en": "Transits are relationships between the current sky and natal chart points (aspects, sign ingresses, etc.). Interpretations vary by school; they offer symbolic framing, not probability."
     },
     {
       "id": "ay_dongusu",
       "category": "ileri",
       "title": "Ay evreleri",
       "triggers": ["yeni ay", "dolunay", "ay evresi", "lunation"],
-      "answer": "Yeni ay ve dolunay gibi evreler takvim ritmi olarak ele alınır; bazı yaklaşımlarda niyet/serbest bırakma gibi sembolik çerçeveler kullanılır. Bu yorumlar gelenekseldir ve herkes için aynı anlamı taşımayabilir."
+      "answer": "Yeni ay ve dolunay gibi evreler takvim ritmi olarak ele alınır; bazı yaklaşımlarda niyet/serbest bırakma gibi sembolik çerçeveler kullanılır. Bu yorumlar gelenekseldir ve herkes için aynı anlamı taşımayabilir.",
+      "answer_en": "Phases like new and full Moon are often treated as calendar rhythms; some approaches use symbolic frames such as intention or release. These readings are traditional and may not mean the same for everyone."
     },
     {
       "id": "burc_gruplari",
       "category": "burclar",
       "title": "Burç grupları",
       "triggers": ["burç grupları", "üçlü gruplar", "astroloji gruplar"],
-      "answer": "Burçlar element ve modaliteye göre gruplanır; ayrıca astronomik komşuluklarıyla 'üçlü' dizilimler (ör. aynı elementten üç burç) hakkında konuşulur. Bu gruplar genel kalıplar içindir."
+      "answer": "Burçlar element ve modaliteye göre gruplanır; ayrıca astronomik komşuluklarıyla 'üçlü' dizilimler (ör. aynı elementten üç burç) hakkında konuşulur. Bu gruplar genel kalıplar içindir.",
+      "answer_en": "Signs are grouped by element and modality; people also discuss 'triads' (e.g. three signs of the same element) in terms of sky layout. These are broad patterns, not rules."
     },
     {
       "id": "terazi_ornek",
       "category": "burclar",
       "title": "Terazi burcu (örnek)",
       "triggers": ["terazi burcu", "terazi özellikleri"],
-      "answer": "Terazi genelde Terazi burcunun temalarıyla anılır: denge, ikilik, ilişkilerde uyum arayışı gibi sembolik vurgular. Güneş burcu tek başına kişiliği tanımlamaz; tüm harita bağlamı gerekir."
+      "answer": "Terazi genelde Terazi burcunun temalarıyla anılır: denge, ikilik, ilişkilerde uyum arayışı gibi sembolik vurgular. Güneş burcu tek başına kişiliği tanımlamaz; tüm harita bağlamı gerekir.",
+      "answer_en": "Libra is often discussed with themes like balance, duality, and seeking harmony in relationships—symbolic emphases. A Sun sign alone does not define a person; the whole chart matters."
     },
     {
       "id": "oglak_ornek",
       "category": "burclar",
       "title": "Oğlak burcu (örnek)",
       "triggers": ["oğlak burcu", "oğlak özellikleri"],
-      "answer": "Oğlak ile sıkça ilişkilendirilen sembolik temalar: yapı, hedef, sınır ve zaman. Bu kısa özet genel kültür düzeyindedir; bireysel yorum için doğum haritası gerekir."
+      "answer": "Oğlak ile sıkça ilişkilendirilen sembolik temalar: yapı, hedef, sınır ve zaman. Bu kısa özet genel kültür düzeyindedir; bireysel yorum için doğum haritası gerekir.",
+      "answer_en": "Capricorn is often linked symbolically to structure, goals, boundaries, and time. This is a broad cultural sketch; individual reading needs a full chart."
     },
     {
       "id": "balik_ornek",
       "category": "burclar",
       "title": "Balık burcu (örnek)",
       "triggers": ["balık burcu", "balık özellikleri"],
-      "answer": "Balık temaları arasında hayal, empati ve sembolik duyarlılık sık anılır. Burç etiketleri eğlence ve öz-anlatım içindir; kimliği indirgemez."
+      "answer": "Balık temaları arasında hayal, empati ve sembolik duyarlılık sık anılır. Burç etiketleri eğlence ve öz-anlatım içindir; kimliği indirgemez.",
+      "answer_en": "Pisces themes often include imagination, empathy, and symbolic sensitivity. Sign labels are for fun and self-expression; they do not reduce identity."
     },
     {
       "id": "asc_mc",
       "category": "gezegen_harita",
       "title": "MC ve AC nedir?",
       "triggers": ["mc nedir", "ac nedir", "orta gök", "midheaven"],
-      "answer": "AC yükselen (doğu ufkunu), MC (Midheaven) ise genelde onuncu ev civarı ve kamusal/yön temalarıyla ilişkilendirilen bir eksendir. Harita sistemine (ev bölümleme) göre hesap değişir."
+      "answer": "AC yükselen (doğu ufkunu), MC (Midheaven) ise genelde onuncu ev civarı ve kamusal/yön temalarıyla ilişkilendirilen bir eksendir. Harita sistemine (ev bölümleme) göre hesap değişir.",
+      "answer_en": "AC is the Ascendant (eastern horizon). MC (Midheaven) is usually tied to the tenth-house area and themes of direction and public life. Exact values depend on the house system."
     },
     {
       "id": "ay_burcu",
       "category": "gezegen_harita",
       "title": "Ay burcu",
       "triggers": ["ay burcu nedir", "duygusal ay burcu"],
-      "answer": "Ay burcu, doğum anında Ay'ın hangi burçta olduğunu gösterir. Yorumlarda duygusal alışkanlıklar ve ihtiyaçlar temasıyla anılır; tam yer için doğum zamanı şarttır."
+      "answer": "Ay burcu, doğum anında Ay'ın hangi burçta olduğunu gösterir. Yorumlarda duygusal alışkanlıklar ve ihtiyaçlar temasıyla anılır; tam yer için doğum zamanı şarttır.",
+      "answer_en": "Moon sign shows which zodiac sign the Moon was in at birth. Interpretations often mention emotional habits and needs; an exact position requires birth time."
     },
     {
       "id": "senkron",
       "category": "ileri",
       "title": "Senkronisite ve astroloji",
       "triggers": ["senkronisite", "jung astroloji"],
-      "answer": "Bazı yaklaşımlar astrolojiyi sembolik paralellikler (senkronisite) çerçevesinde ele alır. Bu felsefi bir çerçevedir; bilimsel kanıt yerine anlam üretme dili olarak konumlanır."
+      "answer": "Bazı yaklaşımlar astrolojiyi sembolik paralellikler (senkronisite) çerçevesinde ele alır. Bu felsefi bir çerçevedir; bilimsel kanıt yerine anlam üretme dili olarak konumlanır.",
+      "answer_en": "Some approaches frame astrology through meaningful coincidence (synchronicity). That is a philosophical stance—meaning-making rather than scientific proof."
     }
   ]
 }
