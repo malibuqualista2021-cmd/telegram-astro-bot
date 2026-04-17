@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # Mesaj / OpenAI
 OPENAI_MAX_TOKENS: int = 600
-OPENAI_TEMPERATURE: float = 0.35
+OPENAI_TEMPERATURE: float = 0.38  # biraz daha doğal/sohbetvari çıktı
 CONVERSATION_MAX_TURNS: int = 4  # kullanıcı+asistan çiftleri (LLM bağlamı)
 
 # Uzun sohbet: bu kadar mesajdan sonra eski kısım özetlenir (user+asistan mesajları toplamı)
