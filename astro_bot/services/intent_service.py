@@ -99,8 +99,14 @@ def intent_instruction(intent: Intent, lang: str) -> str:
         return "Niyet: hafif şaka tonu; yine de tıbbi/hukuki/finans yok; uygunsa çok kısa espri, değilse nazikçe reddet."
     if intent == "horoscope":
         if lang == "en":
-            return "Intent: user sounds like daily horoscope-style question. Give symbolic, non-predictive general themes only; no certainty about future events."
-        return "Niyet: günlük fal/kehanet tarzı. Kesin gelecek iddiası yok; sembolik genel temalar, kısa ve güvenli."
+            return (
+                "Intent: horoscope-style question. Give an interpretive, atmospheric reading—symbolic themes and emotional texture—"
+                "not a generic luck blurb; no dated predictions or certainty about future events."
+            )
+        return (
+            "Niyet: fal / günlük tema tarzı. Yorumlayıcı, atmosferik bir okuma ver; hazır şans cümleleri değil; "
+            "kesin tarih veya kader iddiası yok."
+        )
     if intent == "chat":
         if lang == "en":
             return (
@@ -110,5 +116,15 @@ def intent_instruction(intent: Intent, lang: str) -> str:
         return (
             "Niyet: selamlaşma veya kısa sohbet açılışı. Samimi, sohbetvari 1–4 kısa cümleyle yanıt ver; "
             "astrolojiyle ilgili istediğini düz yazıyla sorabileceğini hatırlat (/komut şart değil)."
+        )
+    if intent == "info":
+        if lang == "en":
+            return (
+                "Intent: substantive astrology. Prioritize interpretation and synthesis (how symbols interact). "
+                "Avoid defaulting to textbook definitions or generic sign stereotypes unless the user asked for a definition."
+            )
+        return (
+            "Niyet: astroloji sorusu. Önce yorum ve sentez: semboller birbiriyle nasıl konuşuyor, hangi tema öne çıkabilir. "
+            "Kullanıcı tanım istemedikçe ansiklopedi cümleleri ve klişe burç listelerinden kaçın."
         )
     return ""

@@ -102,8 +102,8 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
     if lang == "en":
         if mode == "info":
             return (
-                "Conversation mode: educational / encyclopedic. Prioritize clear definitions and structure; "
-                "minimal small talk; still conversational sentences, not a bullet list unless asked."
+                "Conversation mode: user asked for factual / teaching tone. Clear definitions are OK, but still connect ideas "
+                "like an astrologer explaining—not a dry encyclopedia list unless they want lists."
             )
         if mode == "daily":
             return (
@@ -117,8 +117,8 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "chart":
             return (
-                "Conversation mode: prioritize the user's birth chart context when profile data was provided above; "
-                "if data is missing, answer generally and gently note that time/place improves chart-based replies."
+                "Conversation mode: natal / profile-first. Interpret placements as a practitioner would—themes, house emphasis, "
+                "tensions; if birth data is thin, say what’s missing and still reason interpretively, not generically."
             )
         if mode == "horary":
             return (
@@ -130,8 +130,8 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
     else:
         if mode == "info":
             return (
-                "Konuşma modu: öğretici / ansiklopedik. Tanımları ve yapıyı öne çıkar; gereksiz sohbet süsü az; "
-                "yine de doğal cümleler kullan, istenmedikçe düz madde listesi açma."
+                "Konuşma modu: kullanıcı bilgi/öğretici ton istedi. Tanım verebilirsin ama mümkünse astroloğun anlatımı gibi bağla; "
+                "kuru madde listesinden kaçın (liste özellikle istenmedikçe)."
             )
         if mode == "daily":
             return (
@@ -145,8 +145,8 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "chart":
             return (
-                "Konuşma modu: doğum haritası / profil öncelikli. Yukarıda verilen doğum bilgisi bağlamını önce düşün; "
-                "bilgi yoksa genel cevap ver ve tam yorum için tarih/saat/yer gerektiğini nazikçe belirt."
+                "Konuşma modu: doğum / profil öncelikli. Veriyi bir yorumcu gibi işle: temalar, ev vurgusu, gerilimler; "
+                "veri eksikse neyin eksik olduğunu söyle, yine de yorumlayıcı üslup kullan."
             )
         if mode == "horary":
             return (
