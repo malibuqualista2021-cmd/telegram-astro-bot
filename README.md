@@ -12,6 +12,7 @@
 - **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
 - **Inline menü:** SSS kategorileri, burç listesi, yardım, hakkında (düğmelerle gezinme)
 - **Serbest metin:** Önce `knowledge/faq.json` (alt dize + **rapidfuzz** bulanık eşleşme), yoksa seçilen LLM
+- **Sohbet üslubu (komutsuz):** Düz yazıyla örn. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre» — kalıcı mod; özel sohbette `chat_mode` veritabanında saklanır
 - **Bağlam:** Son birkaç tur sohbet modele özet bağlam olarak gider (`CONVERSATION_MAX_TURNS`)
 - **Spam önleme:** Sohbet başına dakikalık hız sınırı (`RATE_LIMIT_PER_MINUTE`)
 - **UX:** Yanıt üretilirken “yazıyor…” göstergesi

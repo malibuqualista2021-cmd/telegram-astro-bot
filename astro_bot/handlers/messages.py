@@ -12,6 +12,11 @@ from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from astro_bot import settings
 from astro_bot.i18n import get_lang, t
+from astro_bot.services.conversation_mode import (
+    mode_ack_message,
+    normalize_chat_mode,
+    parse_chat_mode_phrases,
+)
 from astro_bot.services.faq_service import FaqService
 from astro_bot.services.intent_service import classify_intent
 from astro_bot.services.llm_service import LlmAstrologyService
@@ -64,6 +69,30 @@ async def _process_free_text(
         await update.message.reply_text(t("rate_limit", lang))
         return
 
+    mode_parsed, text = parse_chat_mode_phrases(text, lang)
+    if mode_parsed is not None:
+        context.user_data["chat_mode"] = mode_parsed
+        logger.info("Konuşma modu güncellendi chat_id=%s mode=%s", chat_id, mode_parsed)
+
+    text = text.strip()
+    if not text:
+        if mode_parsed is not None:
+            ack = mode_ack_message(
+                normalize_chat_mode(context.user_data.get("chat_mode")),
+                lang,
+            )
+            await update.message.reply_text(ack)
+            logger.info("Yanıt=mod_onayı chat_id=%s", chat_id)
+            return
+        await update.message.reply_text(
+            "Mesajın boş görünüyor. Astrolojiyle ilgili bir şey yaz."
+            if lang != "en"
+            else "Your message looks empty. Write something about astrology."
+        )
+        return
+
+    chat_mode = normalize_chat_mode(context.user_data.get("chat_mode"))
+
     faq: FaqService = context.bot_data["faq"]
     llm_svc: LlmAstrologyService = context.bot_data["llm"]
     max_turns: int = context.bot_data["conversation_turns"]
@@ -110,10 +139,16 @@ async def _process_free_text(
         profile_hint=hint,
         memory_summary=mem,
         intent=intent,
+        chat_mode=chat_mode,
     )
 
     await update.message.reply_text(reply, reply_markup=_feedback_keyboard())
-    logger.info("Yanıt kaynağı=LLM chat_id=%s intent=%s", chat_id, intent)
+    logger.info(
+        "Yanıt kaynağı=LLM chat_id=%s intent=%s mode=%s",
+        chat_id,
+        intent,
+        chat_mode,
+    )
 
     new_hist = list(context.user_data.get("chat_history") or [])
     new_hist.append({"role": "user", "content": text})

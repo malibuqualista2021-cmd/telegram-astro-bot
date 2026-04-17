@@ -8,12 +8,13 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from astro_bot.services.conversation_mode import ChatMode, mode_system_instruction, normalize_chat_mode
 from astro_bot.services.intent_service import Intent, intent_instruction
 from astro_bot.services.memory_service import SUMMARY_PROMPT_EN, SUMMARY_PROMPT_TR
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_TR = """Sen bir Telegram astroloji asistanısın. Kullanıcılarla düz yazışarak konuşur; komut veya / işareti kullanması şart değil.
+SYSTEM_PROMPT_TR = """Sen bir Telegram astroloji asistanısın. Kullanıcılarla düz yazışarak konuşur; komut veya / işareti kullanması şart değil. İstediği yanıt üslubunu (daha bilgi odaklı, daha sohbet, günlük tema vb.) doğal cümlelerle belirtebilir.
 
 Üslup:
 - Sohbetvari ve doğal Türkçe kullan (“sen” ile hitap edebilirsin); robotik veya ansiklopedi gibi olmak zorunda değilsin.
@@ -27,7 +28,7 @@ Kurallar:
 - Astrolojiyi kültürel/eğlence çerçevesinde konumlandır; bilimsel kesinlik iddiasında bulunma.
 - Önceki mesajlar bağlam olarak verilebilir; tutarlı kal, güvenli ve genel bilgi sınırlarında kal."""
 
-SYSTEM_PROMPT_EN = """You are a Telegram astrology assistant. Users chat in plain text—no slash commands required.
+SYSTEM_PROMPT_EN = """You are a Telegram astrology assistant. Users chat in plain text—no slash commands required. They may ask for a reply style (more factual, chatty, daily-style themes, chart-focused) in natural language.
 
 Tone:
 - Sound natural and conversational (warm, not stiff); you don’t have to sound like an encyclopedia.
@@ -84,12 +85,16 @@ class LlmAstrologyService:
         profile_hint: str,
         memory_summary: str,
         intent: Intent,
+        chat_mode: ChatMode,
     ) -> str:
         base = SYSTEM_PROMPT_EN if lang == "en" else SYSTEM_PROMPT_TR
         parts = [base]
         ih = intent_instruction(intent, lang)
         if ih:
             parts.append(ih)
+        mh = mode_system_instruction(normalize_chat_mode(chat_mode), lang)
+        if mh:
+            parts.append(mh)
         if profile_hint:
             parts.append(profile_hint)
         if memory_summary.strip():
@@ -191,6 +196,7 @@ class LlmAstrologyService:
         profile_hint: str = "",
         memory_summary: str = "",
         intent: Intent = "info",
+        chat_mode: ChatMode = "default",
     ) -> str:
         text = (user_message or "").strip()
         if not text:
@@ -198,7 +204,13 @@ class LlmAstrologyService:
                 return "Your message looks empty. Ask something about astrology."
             return "Mesajın boş görünüyor. Astroloji hakkında bir soru yazabilirsin."
 
-        system = self._build_system(lang, profile_hint, memory_summary, intent)
+        system = self._build_system(
+            lang,
+            profile_hint,
+            memory_summary,
+            intent,
+            normalize_chat_mode(chat_mode),
+        )
         suffix = self._user_suffix(lang)
 
         if self._provider == "gemini":

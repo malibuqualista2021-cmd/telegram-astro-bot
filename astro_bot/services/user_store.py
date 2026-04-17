@@ -13,7 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # user_data içinden kalıcı tutulacak anahtarlar
-PERSIST_KEYS = ("lang", "profile", "chat_history", "memory_summary")
+PERSIST_KEYS = ("lang", "profile", "chat_history", "memory_summary", "chat_mode")
 
 MAX_CHAT_HISTORY_MSGS = 100
 

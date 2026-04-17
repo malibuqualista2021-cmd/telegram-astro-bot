@@ -1,0 +1,164 @@
+"""Sohbet içi konuşma modu — komut yok; doğal dilde mod değişimi."""
+
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+ChatMode = Literal["default", "info", "daily", "chatty", "chart"]
+
+_MODE_ORDER: tuple[ChatMode, ...] = ("default", "info", "daily", "chatty", "chart")
+
+# (regex with re.I, mode) — uzun eşleşmeler önce denenir
+_PATTERNS_TR: list[tuple[re.Pattern[str], ChatMode]] = [
+    (re.compile(r"\b(?:artık\s+)?(?:normal|varsayılan)\s+mod(?:a)?(?:\s+(?:geç|dön))?\b", re.I), "default"),
+    (re.compile(r"\bmodu?\s+sıfırla\b", re.I), "default"),
+    (re.compile(r"\bfabrika\s+ayar(?:ı|ına)?\b", re.I), "default"),
+    (re.compile(r"\b(?:bundan\s+sonra\s+)?sadece\s+bilgi(?:\s+modu)?\b", re.I), "info"),
+    (re.compile(r"\bansiklopedik(?:\s+mod)?\b", re.I), "info"),
+    (re.compile(r"\böğretici\s+mod\b", re.I), "info"),
+    (re.compile(r"\bders\s+gibi\s+anlat\b", re.I), "info"),
+    (re.compile(r"\bkuru\s+bilgi\b", re.I), "info"),
+    (re.compile(r"\bgünlük\s+fal(?:\s+tarzı)?\b", re.I), "daily"),
+    (re.compile(r"\bfal\s+tarzı(?:nda)?\b", re.I), "daily"),
+    (re.compile(r"\bgünlük\s+tema\b", re.I), "daily"),
+    (re.compile(r"\byıldız\s+yorumu\s+gibi\b", re.I), "daily"),
+    (re.compile(r"\bsohbet\s+gibi\b", re.I), "chatty"),
+    (re.compile(r"\bsamimi\s+konuş\b", re.I), "chatty"),
+    (re.compile(r"\bdostça(?:\s+ol)?\b", re.I), "chatty"),
+    (re.compile(r"\brahat\s+bir\s+üslupla\b", re.I), "chatty"),
+    (re.compile(r"\bdoğum\s+haritam(?:a|ı)?\s+göre\b", re.I), "chart"),
+    (re.compile(r"\bharitam(?:a|ı)?\s+göre\b", re.I), "chart"),
+    (re.compile(r"\bprofilime\s+göre\b", re.I), "chart"),
+    (re.compile(r"\bnatal(?:e)?\s+haritam(?:a|ı)?\s+göre\b", re.I), "chart"),
+]
+
+_PATTERNS_EN: list[tuple[re.Pattern[str], ChatMode]] = [
+    (re.compile(r"\b(?:back\s+to\s+)?(?:normal|default)\s+mode\b", re.I), "default"),
+    (re.compile(r"\breset\s+mode\b", re.I), "default"),
+    (re.compile(r"\bfacts?\s+only(?:\s+mode)?\b", re.I), "info"),
+    (re.compile(r"\bencyclopedia\s+style\b", re.I), "info"),
+    (re.compile(r"\bteaching\s+mode\b", re.I), "info"),
+    (re.compile(r"\bdaily\s+horoscope\s+style\b", re.I), "daily"),
+    (re.compile(r"\bhoroscope\s+style\b", re.I), "daily"),
+    (re.compile(r"\bchatty(?:\s+(?:tone|mode))?\b", re.I), "chatty"),
+    (re.compile(r"\bcasual\s+tone\b", re.I), "chatty"),
+    (re.compile(r"\bfriendly\s+tone\b", re.I), "chatty"),
+    (re.compile(r"\bbased\s+on\s+my\s+(?:birth\s+)?chart\b", re.I), "chart"),
+    (re.compile(r"\busing\s+my\s+profile\b", re.I), "chart"),
+    (re.compile(r"\bnatal\s+chart\s+context\b", re.I), "chart"),
+]
+
+
+def _normalize_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def parse_chat_mode_phrases(text: str, lang: str) -> tuple[ChatMode | None, str]:
+    """Mod ifadelerini metinden çıkarır. Dönüş: (son eşleşen mod veya None, LLM'e gidecek temiz metin)."""
+    if not (text or "").strip():
+        return None, ""
+
+    patterns = _PATTERNS_EN if lang == "en" else _PATTERNS_TR
+    cleaned = text
+    last_mode: ChatMode | None = None
+
+    for _ in range(24):
+        best: tuple[int, int, ChatMode] | None = None
+        for pat, mode in patterns:
+            m = pat.search(cleaned)
+            if m:
+                span = (m.start(), m.end(), mode)
+                if best is None or span[0] < best[0]:
+                    best = span
+        if best is None:
+            break
+        start, end, mode = best
+        cleaned = cleaned[:start] + " " + cleaned[end:]
+        last_mode = mode
+        cleaned = _normalize_ws(cleaned)
+
+    return last_mode, cleaned
+
+
+def normalize_chat_mode(raw: object) -> ChatMode:
+    if isinstance(raw, str) and raw in _MODE_ORDER:
+        return raw  # type: ignore[return-value]
+    return "default"
+
+
+def mode_system_instruction(mode: ChatMode, lang: str) -> str:
+    """Sistem prompt'una eklenecek ek üslup talimatı."""
+    if mode == "default":
+        return ""
+
+    if lang == "en":
+        if mode == "info":
+            return (
+                "Conversation mode: educational / encyclopedic. Prioritize clear definitions and structure; "
+                "minimal small talk; still conversational sentences, not a bullet list unless asked."
+            )
+        if mode == "daily":
+            return (
+                "Conversation mode: daily-horoscope style. Short symbolic themes and mood-flavour wording only; "
+                "no predictions of specific future events; remind that it is symbolic."
+            )
+        if mode == "chatty":
+            return (
+                "Conversation mode: warm and chatty. A bit more personality and empathy in tone; "
+                "still accurate on astrology basics and safety rules."
+            )
+        if mode == "chart":
+            return (
+                "Conversation mode: prioritize the user's birth chart context when profile data was provided above; "
+                "if data is missing, answer generally and gently note that time/place improves chart-based replies."
+            )
+    else:
+        if mode == "info":
+            return (
+                "Konuşma modu: öğretici / ansiklopedik. Tanımları ve yapıyı öne çıkar; gereksiz sohbet süsü az; "
+                "yine de doğal cümleler kullan, istenmedikçe düz madde listesi açma."
+            )
+        if mode == "daily":
+            return (
+                "Konuşma modu: günlük fal / tema tarzı. Kısa, sembolik tema ve havadan bahset; "
+                "belirli gelecek olayları kehanet etme; bunun sembolik çerçeve olduğunu ima et."
+            )
+        if mode == "chatty":
+            return (
+                "Konuşma modu: samimi sohbet. Biraz daha sıcak ve doğal üslup; "
+                "astroloji içeriği ve güvenlik kuralları aynı kalır."
+            )
+        if mode == "chart":
+            return (
+                "Konuşma modu: doğum haritası / profil öncelikli. Yukarıda verilen doğum bilgisi bağlamını önce düşün; "
+                "bilgi yoksa genel cevap ver ve tam yorum için tarih/saat/yer gerektiğini nazikçe belirt."
+            )
+    return ""
+
+
+def mode_ack_message(mode: ChatMode, lang: str) -> str:
+    """Yalnızca mod değiştiği ve soru metni kalmadığında gönderilecek kısa onay."""
+    if lang == "en":
+        hints = {
+            "default": "balanced style",
+            "info": "more educational, facts-first",
+            "daily": "short symbolic daily-style themes",
+            "chatty": "warmer, more conversational",
+            "chart": "using your chart / profile context when available",
+        }
+        return (
+            f"Got it — I'll answer in {hints[mode]} from now on. "
+            "Ask anything about astrology in your own words."
+        )
+    hints_tr = {
+        "default": "dengeli üslup",
+        "info": "daha öğretici, bilgi öncelikli",
+        "daily": "kısa, sembolik günlük tema tarzı",
+        "chatty": "daha samimi sohbet tonu",
+        "chart": "mümkünse doğum / harita bağlamını öne çıkararak",
+    }
+    return (
+        f"Tamam — bundan sonra yanıtlarım {hints_tr[mode]} olacak. "
+        "Astrolojiyle ilgili sorunu düz yazıyla yazman yeterli."
+    )
