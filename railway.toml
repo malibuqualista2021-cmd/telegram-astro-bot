@@ -1,0 +1,10 @@
+# Railway: GitHub'dan deploy + ortam değişkenleri (TELEGRAM_BOT_TOKEN, OPENAI_API_KEY)
+# https://docs.railway.app/deploy/config-as-code
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python -m astro_bot"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
