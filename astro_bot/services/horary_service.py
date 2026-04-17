@@ -241,15 +241,36 @@ def format_horary_context(
             asp_lines.append(f"{labels_tr.get(p1, p1)}–{labels_tr.get(p2, p2)}: {asp_tr.get(kind, kind)} (~{sep:.1f}°)")
 
     rh = _house_placidus(ruler_lon, cusps) if cusps is not None else _house_whole_sign(ruler_lon, asc)
+    if cusps is not None:
+        c7_lon = float(c12[6]) % 360
+        sig7_idx = _sign_idx(c7_lon)
+    else:
+        sig7_idx = (asc_idx + 6) % 12
+        c7_lon = float(sig7_idx * 30)
+    seventh_ruler = _SIGN_RULER_EN[sig7_idx]
+    moon_h = _house_placidus(lons["Moon"], cusps) if cusps is not None else _house_whole_sign(lons["Moon"], asc)
+
     if lang == "en":
         ruler_line = (
             f"Ascendant ruler (traditional): {ruler_name} in {sign_name(_sign_idx(ruler_lon), lang)} "
             f"~{ruler_lon:.1f}°, house {rh}."
         )
+        sig_line = (
+            f"Simplified significators (relationship / ‘other person’ questions): "
+            f"1st house / Asc theme ≈ querent; 7th house cusp ≈ {sign_name(sig7_idx, lang)} (~{c7_lon:.1f}°), "
+            f"its traditional ruler = {seventh_ruler} (check that planet’s sign/house/aspects below). "
+            f"Moon is often read for the situation—here Moon is in house {moon_h}."
+        )
     else:
         ruler_line = (
             f"Yükselen yöneticisi (klasik): {labels_tr.get(ruler_name, ruler_name)} → "
             f"{sign_name(_sign_idx(ruler_lon), lang)} ~{ruler_lon:.1f}°, {rh}. ev."
+        )
+        sig_line = (
+            f"Basitleştirilmiş sigifikatörler (ilişki / ‘karşı taraf’ soruları): "
+            f"1. ev / yükselen teması ≈ soruyu soran; 7. ev başı ≈ {sign_name(sig7_idx, lang)} (~{c7_lon:.1f}°), "
+            f"klasik yönetici = {labels_tr.get(seventh_ruler, seventh_ruler)} — aşağıda o gezegenin burç/ev/açılarına bak. "
+            f"Ay sıkça durum/temayı gösterir; burada Ay {moon_h}. evde."
         )
 
     lines: list[str] = []
@@ -263,18 +284,20 @@ def format_horary_context(
         lines.append(f"UTC: {q.isoformat()}")
         lines.append(f"Asc ~{asc:.1f}° ({sign_name(asc_idx, lang)}), MC ~{mc:.1f}° ({sign_name(_sign_idx(mc), lang)}).")
         lines.append(ruler_line)
+        lines.append(sig_line)
         lines.append("Planet longitudes & houses:")
         lines.extend(house_lines)
         if asp_lines:
             lines.append("Major aspects (orb ~7°):")
             lines.extend(asp_lines)
         lines.append(
-            "INTERPRETATION RULES: You MUST synthesize an answer from the houses, Asc ruler, Moon condition, "
-            "and aspects above. FORBIDDEN: generic pop-astrology paragraphs about Sun signs alone "
-            "(e.g. ‘As an Aries you are…’) unless you explicitly tie them to this chart’s placements. "
-            "Give a coherent horary-style reading: tensions, supports, and symbolic ‘lean’ of the question—"
-            "use conditional language (‘suggests’, ‘may point toward’), not fate. "
-            "No legal/medical/financial verdicts."
+            "INTERPRETATION RULES: Synthesize from Asc ruler, Moon, 7th-house themes (and that house ruler’s condition), "
+            "and aspects—tie sentences to those specific placements. "
+            "FORBIDDEN: canned emotional paragraphs, ‘they secretly love/hate you’ mind-reading, or Sun-sign stereotypes. "
+            "If the question is vague (who X is, nature of bond, timing), ask 1–2 short clarifying questions FIRST "
+            "or say what you need before a long reading—do not fake certainty. "
+            "Another person’s private feelings cannot be known for sure; speak in symbolic chart language only. "
+            "Conditional phrasing (‘suggests’, ‘may lean toward’). No legal/medical/financial verdicts."
         )
     else:
         lines.append("=== Horary harita verisi (yorumu BUNA dayandır; hazır burç kalıbı kullanma) ===")
@@ -288,16 +311,18 @@ def format_horary_context(
             f"Yükselen ~{asc:.1f}° ({sign_name(asc_idx, lang)}), MC ~{mc:.1f}° ({sign_name(_sign_idx(mc), lang)})."
         )
         lines.append(ruler_line)
+        lines.append(sig_line)
         lines.append("Gezegenler ve evler:")
         lines.extend(house_lines)
         if asp_lines:
             lines.append("Öne çıkan majör açılar (~7° orb):")
             lines.extend(asp_lines)
         lines.append(
-            "YORUM KURALLARI: Yanıtını mutlaka yukarıdaki ev yerleşimleri, yükselen yöneticisi, Ay ve açılar "
-            "üzerinden sentezle. YASAK: İnternetteki gibi yalnızca Güneş burcu genel kişilik metni "
-            "(ör. ‘Koçsun, cesursun…’) — böyle yazacaksan bu haritadaki hangi unsur bunu destekliyor diye bağla. "
-            "Horary üslubu: çekimler, gerilimler, sembolik ‘eğilim’; koşullu anlat (‘işaret edebilir’, ‘tema şu yönde olabilir’). "
+            "YORUM KURALLARI: Yükselen yöneticisi, Ay, 7. ev başı ve o evin yöneticisinin durumu ile açıları birlikte oku; "
+            "her cümleyi bu veriye bağla. YASAK: ezber duygu metni, ‘sana şunu hissediyor’ diye kesin zihin okuma, "
+            "sadece Güneş burcu kalıbı. Soru belirsizse (X kim, ilişki türü, ne zaman) önce 1–2 netleştirici soru sor "
+            "veya uzun yorumdan önce neye ihtiyaç olduğunu söyle—boşluğu doldurmuş gibi yazma. "
+            "Başkasının özel duyguları kesin bilinmez; sembolik harita dili kullan. Koşullu anlat. "
             "Hukuki/tıbbi/finansal kesin hüküm yok."
         )
 

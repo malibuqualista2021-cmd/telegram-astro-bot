@@ -122,10 +122,11 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Conversation mode: horary. A full chart-data block (houses Placidus or whole-sign fallback, Asc ruler, major aspects) "
-                "is in the system message—your answer MUST interpret that data in a coherent narrative. "
-                "Forbidden: generic pop Sun-sign boilerplate not tied to those placements. "
-                "Use symbolic, conditional language; no legal/medical/financial verdicts."
+                "Conversation mode: horary. Chart data + simplified significators are in the system message—read them together. "
+                "If the question is underspecified (e.g. feelings toward an unnamed ‘X’), ask 1–2 clarifying questions first "
+                "or state what you need; do not fill gaps with canned romance text. "
+                "No mind-reading certainties about others’ private feelings; symbolic chart language only. "
+                "Forbidden: generic Sun-sign boilerplate. No legal/medical/financial verdicts."
             )
     else:
         if mode == "info":
@@ -150,10 +151,10 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Konuşma modu: horary. Sistem mesajında evler (Placidus veya tam burç yedek), yükselen yöneticisi ve majör açılar var; "
-                "yanıtın BUNLARI sentezleyerek bir bütün olarak yorumlanmalı. "
-                "Yasak: o veriye bağlanmadan internetteki gibi düz Güneş burcu kişilik metni. "
-                "Sembolik ve koşullu dil kullan; hukuki/tıbbi/finansal kesin hüküm yok."
+                "Konuşma modu: horary. Sistemde harita + basit sigifikatör ipuçları var; bunları birlikte oku. "
+                "Soru eksikse (ör. ‘X’ kim, ilişki ne, bağlam yok) önce 1–2 netleştirici soru sor veya neye ihtiyaç olduğunu söyle; "
+                "ezber aşk/duygu paragrafıyla boşluğu doldurma. Başkasının özel duyguları kesin bilinmez; sembolik dil. "
+                "Yasak: düz Güneş burcu kalıbı. Hukuki/tıbbi/finansal kesin hüküm yok."
             )
     return ""
 

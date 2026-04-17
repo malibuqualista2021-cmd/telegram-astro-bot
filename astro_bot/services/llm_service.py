@@ -115,13 +115,14 @@ class LlmAstrologyService:
         if horary:
             if lang == "en":
                 base += (
-                    "\n\nHorary: your answer must use the chart data from the system message (houses, ruler, aspects). "
-                    "Do not reply with generic Sun-sign personality text unrelated to that chart."
+                    "\n\nHorary: ground every claim in the system chart (houses, rulers, aspects, 7th-house thread). "
+                    "If the user’s question is vague, ask brief clarifying questions before a long take. "
+                    "No mind-reading certainties; no generic Sun-sign filler."
                 )
             else:
                 base += (
-                    "\n\nHorary: yanıtını sistemdeki harita verisine (evler, yönetici, açılar) dayandır; "
-                    "o haritayla bağlantısı olmayan hazır Güneş burcu metni yazma."
+                    "\n\nHorary: her iddiayı sistemdeki haritaya (evler, yöneticiler, açılar, 7. ev hattı) bağla. "
+                    "Soru belirsizse uzun yorumdan önce kısa netleştirici sorular sor. Kesin zihin okuma yok; hazır burç metni yok."
                 )
         return base
 
