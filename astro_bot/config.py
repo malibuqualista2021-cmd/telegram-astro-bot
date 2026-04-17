@@ -40,9 +40,63 @@ def _optional_float(name: str, fallback: float) -> float:
         return fallback
 
 
+def _resolve_llm() -> tuple[str, str, str]:
+    """(provider, api_key, model) — provider: openai | groq | gemini"""
+    explicit = os.getenv("LLM_PROVIDER", "").strip().lower()
+    openai_k = os.getenv("OPENAI_API_KEY", "").strip()
+    groq_k = os.getenv("GROQ_API_KEY", "").strip()
+    gemini_k = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+    model_override = os.getenv("LLM_MODEL", "").strip()
+
+    if explicit in ("openai", "groq", "gemini"):
+        if explicit == "openai":
+            if not openai_k:
+                raise RuntimeError(
+                    "LLM_PROVIDER=openai seçildi; OPENAI_API_KEY gerekli "
+                    "(https://platform.openai.com/api-keys)."
+                )
+            model = model_override or os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+            return "openai", openai_k, model
+        if explicit == "groq":
+            if not groq_k:
+                raise RuntimeError(
+                    "LLM_PROVIDER=groq seçildi; GROQ_API_KEY gerekli "
+                    "(ücretsiz: https://console.groq.com/keys)."
+                )
+            model = model_override or "llama-3.3-70b-versatile"
+            return "groq", groq_k, model
+        if explicit == "gemini":
+            if not gemini_k:
+                raise RuntimeError(
+                    "LLM_PROVIDER=gemini seçildi; GEMINI_API_KEY veya GOOGLE_API_KEY gerekli "
+                    "(https://aistudio.google.com/apikey)."
+                )
+            model = model_override or "gemini-1.5-flash"
+            return "gemini", gemini_k, model
+
+    # Otomatik: hangi anahtar varsa onu kullan (öncelik: OpenAI → Groq → Gemini)
+    if openai_k:
+        model = model_override or os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+        return "openai", openai_k, model
+    if groq_k:
+        model = model_override or "llama-3.3-70b-versatile"
+        return "groq", groq_k, model
+    if gemini_k:
+        model = model_override or "gemini-1.5-flash"
+        return "gemini", gemini_k, model
+
+    raise RuntimeError(
+        "LLM için en az bir API anahtarı gerekli. Örnekler:\n"
+        "  • GROQ_API_KEY — ücretsiz katman: https://console.groq.com/keys\n"
+        "  • OPENAI_API_KEY — https://platform.openai.com/api-keys\n"
+        "  • GEMINI_API_KEY veya GOOGLE_API_KEY — https://aistudio.google.com/apikey\n"
+        "İsteğe bağlı: LLM_PROVIDER=openai|groq|gemini ve LLM_MODEL=..."
+    )
+
+
 TELEGRAM_BOT_TOKEN: str = _require_env("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY: str = _require_env("OPENAI_API_KEY")
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+
+LLM_PROVIDER, LLM_API_KEY, LLM_MODEL = _resolve_llm()
 
 KNOWLEDGE_DIR: Path = _PROJECT_ROOT / "knowledge"
 FAQ_PATH: Path = KNOWLEDGE_DIR / "faq.json"

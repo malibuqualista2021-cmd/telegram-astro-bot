@@ -12,10 +12,11 @@ from telegram.ext import Application
 from astro_bot import __version__, settings
 from astro_bot.config import (
     FAQ_PATH,
+    LLM_API_KEY,
+    LLM_MODEL,
+    LLM_PROVIDER,
     LOGS_DIR,
     LOG_LEVEL,
-    OPENAI_API_KEY,
-    OPENAI_MODEL,
     TELEGRAM_BOT_TOKEN,
     resolved_conversation_turns,
     resolved_faq_fuzzy_threshold,
@@ -27,7 +28,7 @@ from astro_bot.handlers.callbacks import register_callback_handlers
 from astro_bot.handlers.commands import register_command_handlers
 from astro_bot.handlers.messages import register_message_handlers
 from astro_bot.services.faq_service import FaqService
-from astro_bot.services.openai_service import OpenAiAstrologyService
+from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.rate_limit import ChatRateLimiter
 
 
@@ -59,13 +60,19 @@ def setup_logging() -> None:
 def main() -> None:
     setup_logging()
     log = logging.getLogger(__name__)
-    log.info("Astroloji bot başlıyor (sürüm %s)", __version__)
+    log.info(
+        "Astroloji bot başlıyor (sürüm %s, LLM=%s, model=%s)",
+        __version__,
+        LLM_PROVIDER,
+        LLM_MODEL,
+    )
 
     fuzzy = resolved_faq_fuzzy_threshold()
     faq = FaqService(FAQ_PATH, fuzzy_threshold=fuzzy)
-    openai_svc = OpenAiAstrologyService(
-        api_key=OPENAI_API_KEY,
-        model=OPENAI_MODEL,
+    llm_svc = LlmAstrologyService(
+        provider=LLM_PROVIDER,
+        api_key=LLM_API_KEY,
+        model=LLM_MODEL,
         max_tokens=resolved_openai_max_tokens(),
         temperature=resolved_openai_temperature(),
     )
@@ -79,7 +86,7 @@ def main() -> None:
         .build()
     )
     application.bot_data["faq"] = faq
-    application.bot_data["openai"] = openai_svc
+    application.bot_data["llm"] = llm_svc
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["conversation_turns"] = turns
 

@@ -10,7 +10,7 @@ from telegram.constants import ChatAction
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from astro_bot.services.faq_service import FaqService
-from astro_bot.services.openai_service import OpenAiAstrologyService
+from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.rate_limit import ChatRateLimiter
 from astro_bot.texts import RATE_LIMIT_TEXT
 
@@ -39,7 +39,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     faq: FaqService = context.bot_data["faq"]
-    openai_svc: OpenAiAstrologyService = context.bot_data["openai"]
+    llm_svc: LlmAstrologyService = context.bot_data["llm"]
     max_turns: int = context.bot_data["conversation_turns"]
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
@@ -53,10 +53,10 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     hist_raw: list[dict[str, Any]] = context.user_data.get("chat_history") or []
     history = _trim_history(hist_raw, max_turns)
 
-    reply = await openai_svc.reply(text, history=history)
+    reply = await llm_svc.reply(text, history=history)
 
     await update.message.reply_text(reply)
-    logger.info("Yanıt kaynağı=OpenAI chat_id=%s", chat_id)
+    logger.info("Yanıt kaynağı=LLM chat_id=%s", chat_id)
 
     new_hist = list(hist_raw)
     new_hist.append({"role": "user", "content": text})
