@@ -15,12 +15,12 @@ def get_lang(code: str | None) -> Lang:
 MESSAGES: dict[str, dict[str, str]] = {
     "tr": {
         "start": (
-            "<b>Merhaba!</b> Ben senin astroloji odaklı akıllı yol arkadaşınım.\n\n"
-            "İstersen doğum haritanı yorumlayabilirim; istersen aşk, ilişki, kariyer, ruh hali ya da bu dönemdeki enerjilere bakabiliriz.\n"
-            "Doğum tarihi, mümkünse doğum saati ve doğum yerini yazman yeterli. Saat yoksa yine yorum yaparım; yükselen ve evler gibi bazı alanlar daha genel kalır.\n\n"
-            "<b>Profil:</b> /dogum /saat /konum ile kayıt; /harita ile eğitim amaçlı Güneş/Ay/Yükselen özeti.\n"
-            "Dil: /lang tr veya /lang en — Menüden seç veya doğrudan yaz.\n\n"
-            "<i>Sembolik içgörü ve eğilimler; kesin kader dili değil.</i>"
+            "<b>Merhaba!</b> Astroloji odaklı sohbet arkadaşın burada: doğum haritası, aşk, ilişki, kariyer, ruh hali "
+            "veya dönem enerjileri için yanınızdayım.\n\n"
+            "<b>Doğum tarihi</b>, mümkünse <b>saat</b> ve <b>yer</b> yazman yeterli; saat yoksa yine yorum yaparım, "
+            "yükselen ve evler daha genel kalabilir.\n\n"
+            "<b>Kısayol:</b> /dogum /saat /konum — /harita ile eğitim amaçlı Güneş/Ay/Yükselen özeti.\n\n"
+            "Dil: /lang tr veya /lang en — Menüyü kullan veya doğrudan sorunu yaz."
         ),
         "help": (
             "<b>Komutlar</b>\n"
@@ -72,12 +72,11 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "en": {
         "start": (
-            "<b>Hello!</b> I’m your astrology-focused companion on Telegram.\n\n"
-            "We can look at your chart, love and relationships, career, mood, or the energy of this period.\n"
-            "Share birth date, time if you have it, and place. Without birth time, some topics stay broader (e.g. houses/Asc).\n\n"
-            "<b>Profile:</b> /dogum /saat /konum; /harita for an educational Sun/Moon/Asc snapshot.\n"
-            "Language: /lang tr or /lang en — menu or type freely.\n\n"
-            "<i>Symbolic insight and tendencies—not fixed fate.</i>"
+            "<b>Hello!</b> I'm a general astrology info assistant.\n\n"
+            "Ask about signs, planets, houses, and chart concepts. I search the local FAQ first, "
+            "then use an LLM for a short answer.\n\n"
+            "<b>Profile:</b> /dogum /saat /konum for birth data; /harita for an educational Sun/Moon/Asc summary.\n\n"
+            "Language: /lang tr or /lang en — Use the menu below or type your question."
         ),
         "help": (
             "<b>Commands</b>\n"
