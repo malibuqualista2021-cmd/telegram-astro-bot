@@ -99,14 +99,8 @@ def intent_instruction(intent: Intent, lang: str) -> str:
         return "Niyet: hafif şaka tonu; yine de tıbbi/hukuki/finans yok; uygunsa çok kısa espri, değilse nazikçe reddet."
     if intent == "horoscope":
         if lang == "en":
-            return (
-                "Intent: horoscope-style question. Give an interpretive, atmospheric reading—symbolic themes and emotional texture—"
-                "not a generic luck blurb; no dated predictions or certainty about future events."
-            )
-        return (
-            "Niyet: fal / günlük tema tarzı. Yorumlayıcı, atmosferik bir okuma ver; hazır şans cümleleri değil; "
-            "kesin tarih veya kader iddiası yok."
-        )
+            return "Intent: period / horoscope-style—interpretive atmosphere, no dated fate claims (main persona applies)."
+        return "Niyet: dönem / fal tarzı—yorumlayıcı atmosfer; kesin tarih-kader yok (ana persona geçerli)."
     if intent == "chat":
         if lang == "en":
             return (
@@ -119,12 +113,6 @@ def intent_instruction(intent: Intent, lang: str) -> str:
         )
     if intent == "info":
         if lang == "en":
-            return (
-                "Intent: substantive astrology. Prioritize interpretation and synthesis (how symbols interact). "
-                "Avoid defaulting to textbook definitions or generic sign stereotypes unless the user asked for a definition."
-            )
-        return (
-            "Niyet: astroloji sorusu. Önce yorum ve sentez: semboller birbiriyle nasıl konuşuyor, hangi tema öne çıkabilir. "
-            "Kullanıcı tanım istemedikçe ansiklopedi cümleleri ve klişe burç listelerinden kaçın."
-        )
+            return "Intent: astrology Q&A—follow the main system persona (insightful, specific, not generic blurbs)."
+        return "Niyet: astroloji sorusu—ana sistem personasına uy (içgörülü, özgül, klişe değil)."
     return ""
