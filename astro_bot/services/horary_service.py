@@ -291,13 +291,12 @@ def format_horary_context(
             lines.append("Major aspects (orb ~7°):")
             lines.extend(asp_lines)
         lines.append(
-            "INTERPRETATION RULES: Synthesize from Asc ruler, Moon, 7th-house themes (and that house ruler’s condition), "
-            "and aspects—tie sentences to those specific placements. "
-            "FORBIDDEN: canned emotional paragraphs, ‘they secretly love/hate you’ mind-reading, or Sun-sign stereotypes. "
-            "If the question is vague (who X is, nature of bond, timing), ask 1–2 short clarifying questions FIRST "
-            "or say what you need before a long reading—do not fake certainty. "
-            "Another person’s private feelings cannot be known for sure; speak in symbolic chart language only. "
-            "Conditional phrasing (‘suggests’, ‘may lean toward’). No legal/medical/financial verdicts."
+            "INTERPRETATION RULES: Tie sentences to Asc ruler, Moon, 7th-house line, aspects—no generic blurbs. "
+            "FORBIDDEN: repeating the same placement paragraph you already wrote in your last reply (copy-paste loop); "
+            "at most one short callback. Max 1–2 clarifying questions per thread turn; once the user answers, give a concise "
+            "symbolic synthesis / ‘lean’—do not chain endless finer questions (which market, which pair, which strategy). "
+            "Money/crypto/FX: no buy/sell, profit dates, or trading calls—symbolic themes only; not financial advice. "
+            "No mind-reading certainties. Conditional phrasing. No legal/medical verdicts."
         )
     else:
         lines.append("=== Horary harita verisi (yorumu BUNA dayandır; hazır burç kalıbı kullanma) ===")
@@ -318,12 +317,12 @@ def format_horary_context(
             lines.append("Öne çıkan majör açılar (~7° orb):")
             lines.extend(asp_lines)
         lines.append(
-            "YORUM KURALLARI: Yükselen yöneticisi, Ay, 7. ev başı ve o evin yöneticisinin durumu ile açıları birlikte oku; "
-            "her cümleyi bu veriye bağla. YASAK: ezber duygu metni, ‘sana şunu hissediyor’ diye kesin zihin okuma, "
-            "sadece Güneş burcu kalıbı. Soru belirsizse (X kim, ilişki türü, ne zaman) önce 1–2 netleştirici soru sor "
-            "veya uzun yorumdan önce neye ihtiyaç olduğunu söyle—boşluğu doldurmuş gibi yazma. "
-            "Başkasının özel duyguları kesin bilinmez; sembolik harita dili kullan. Koşullu anlat. "
-            "Hukuki/tıbbi/finansal kesin hüküm yok."
+            "YORUM KURALLARI: Yükselen yöneticisi, Ay, 7. ev hattı ve açıları birlikte oku; her iddiayı veriye bağla. "
+            "YASAK: bir önceki mesajındaki aynı gezegen-ev paragraflarını baştan aynen tekrarlamak (kopyala-yapıştır döngüsü); "
+            "en fazla tek cümleyle hatırlat. Netleştirici soru bu turda en fazla 1–2; kullanıcı cevap verdiyse sembolik özet ve "
+            "sorunun eğilimi ile ilerle—sonsuz alt soru (hangi parite, hangi strateji) ile bitirme. "
+            "Para/kripto/FX: kesin kazanç zamanı veya al-sat yok; sembolik tema; yatırım tavsiyesi değilsin. "
+            "Kesin zihin okuma yok; koşullu anlat. Hukuki/tıbbi kesin hüküm yok."
         )
 
     return "\n".join(lines)

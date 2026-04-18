@@ -74,14 +74,13 @@ class LlmAstrologyService:
         if horary:
             if lang == "en":
                 base += (
-                    "\n\nHorary: ground every claim in the system chart (houses, rulers, aspects, 7th-house thread). "
-                    "If the user’s question is vague, ask brief clarifying questions before a long take. "
-                    "No mind-reading certainties; no generic Sun-sign filler."
+                    "\n\nHorary: do not repeat your previous reply’s chart paragraphs. "
+                    "Max 1–2 clarifiers; then give a short synthesis. No trading/finance calls. Keep it brief."
                 )
             else:
                 base += (
-                    "\n\nHorary: her iddiayı sistemdeki haritaya (evler, yöneticiler, açılar, 7. ev hattı) bağla. "
-                    "Soru belirsizse uzun yorumdan önce kısa netleştirici sorular sor. Kesin zihin okuma yok; hazır burç metni yok."
+                    "\n\nHorary: önceki mesajındaki harita paragraflarını tekrarlama. "
+                    "En fazla 1–2 net soru; sonra kısa özet. Kripto/FX’te al-sat veya kazanç tarihi yok. Kısa yaz."
                 )
         return base
 

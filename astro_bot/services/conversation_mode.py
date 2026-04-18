@@ -122,11 +122,9 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Conversation mode: horary. Chart data + simplified significators are in the system message—read them together. "
-                "If the question is underspecified (e.g. feelings toward an unnamed ‘X’), ask 1–2 clarifying questions first "
-                "or state what you need; do not fill gaps with canned romance text. "
-                "No mind-reading certainties about others’ private feelings; symbolic chart language only. "
-                "Forbidden: generic Sun-sign boilerplate. No legal/medical/financial verdicts."
+                "Conversation mode: horary. Use chart data + significators; do NOT re-paste the same placement blocks from your previous reply. "
+                "Max 1–2 clarifying questions; then deliver a concise symbolic synthesis—no endless finer-detail questions. "
+                "Money/crypto/FX: symbolic only; no trading signals. No mind-reading. Keep replies Telegram-short."
             )
     else:
         if mode == "info":
@@ -151,10 +149,9 @@ def mode_system_instruction(mode: ChatMode, lang: str) -> str:
             )
         if mode == "horary":
             return (
-                "Konuşma modu: horary. Sistemde harita + basit sigifikatör ipuçları var; bunları birlikte oku. "
-                "Soru eksikse (ör. ‘X’ kim, ilişki ne, bağlam yok) önce 1–2 netleştirici soru sor veya neye ihtiyaç olduğunu söyle; "
-                "ezber aşk/duygu paragrafıyla boşluğu doldurma. Başkasının özel duyguları kesin bilinmez; sembolik dil. "
-                "Yasak: düz Güneş burcu kalıbı. Hukuki/tıbbi/finansal kesin hüküm yok."
+                "Konuşma modu: horary. Önceki yanıttaki aynı harita paragraflarını tekrarlama. "
+                "Netleştirici soru en fazla 1–2; kullanıcı yanıtladıysa kısa sembolik özet/sonuç ver—sonsuz alt soru ile döngüye girme. "
+                "Para/kripto: sembolik çerçeve; al-sat veya kazanç garantisi yok. Yanıtlar kısa ve Telegram’a uygun."
             )
     return ""
 
