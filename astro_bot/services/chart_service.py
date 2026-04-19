@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from astro_bot.i18n import Lang
@@ -14,7 +14,36 @@ from astro_bot.services.profile_service import UserProfile, observer_datetime
 logger = logging.getLogger(__name__)
 
 OBLIQUITY_DEG = 23.4392911
-HOUSE_SYSTEM = "Placidus (P)"
+HOUSE_LABEL = {
+    "placidus": "Placidus",
+    "whole": "Whole Sign",
+    "wholesign": "Whole Sign",
+    "equal": "Equal (A)",
+    "koch": "Koch",
+    "campanus": "Campanus",
+    "regiomontanus": "Regiomontanus",
+    "porphyry": "Porphyry",
+}
+
+
+def house_system_to_bytes(name: str) -> bytes:
+    m = {
+        "placidus": b"P",
+        "whole": b"W",
+        "wholesign": b"W",
+        "equal": b"A",
+        "koch": b"K",
+        "campanus": b"C",
+        "regiomontanus": b"R",
+        "porphyry": b"O",
+    }
+    return m.get((name or "placidus").lower().strip(), b"P")
+
+
+def house_system_display(name: str, lang: Lang) -> str:
+    key = (name or "placidus").lower().strip()
+    lab = HOUSE_LABEL.get(key, "Placidus")
+    return lab
 
 # --- Burç isimleri (mevcut API) ---
 
@@ -126,21 +155,32 @@ def _aspect_match(
     lon2: float,
     name1: str,
     name2: str,
+    *,
+    allow_minor: bool = False,
 ) -> tuple[int, str, float] | None:
     """(açı, kısa_etiket, orb) veya None."""
     sep = _separation_deg(lon1, lon2)
-    candidates: list[tuple[float, int, str]] = [
-        (0.0, 0, "conj"),
-        (60.0, 60, "sext"),
-        (90.0, 90, "sq"),
-        (120.0, 120, "tri"),
-        (180.0, 180, "opp"),
+    orb_maj = max(_orb_for_body(name1), _orb_for_body(name2))
+    pool: list[tuple[float, int, str, float]] = [
+        (0.0, 0, "conj", orb_maj),
+        (60.0, 60, "sext", orb_maj),
+        (90.0, 90, "sq", orb_maj),
+        (120.0, 120, "tri", orb_maj),
+        (180.0, 180, "opp", orb_maj),
     ]
-    orb_limit = max(_orb_for_body(name1), _orb_for_body(name2))
+    if allow_minor:
+        mo = 2.5
+        pool.extend(
+            [
+                (30.0, 30, "semi", mo),
+                (45.0, 45, "sq45", mo),
+                (150.0, 150, "qcx", mo),
+            ]
+        )
     best: tuple[float, int, str] | None = None
-    for target, angle, tag in candidates:
+    for target, angle, tag, orb_lim in pool:
         delta = abs(sep - target)
-        if delta <= orb_limit:
+        if delta <= orb_lim:
             if best is None or delta < best[0]:
                 best = (delta, angle, tag)
     if best is None:
@@ -180,6 +220,8 @@ def _swisseph_body_list():
         (swe.PLUTO, "Pluto"),
         (swe.MEAN_NODE, "MeanNode"),
     ]
+    if hasattr(swe, "TRUE_NODE"):
+        rows.append((int(swe.TRUE_NODE), "TrueNode"))
     if hasattr(swe, "CHIRON"):
         rows.append((int(swe.CHIRON), "Chiron"))
     return rows
@@ -191,6 +233,7 @@ def _compute_swisseph_natal(
     lon_deg: float,
     *,
     with_houses: bool,
+    hsys: bytes = b"P",
 ) -> tuple[list[PlanetPoint], list[float] | None, float | None, float | None, str] | None:
     try:
         import swisseph as swe
@@ -231,7 +274,7 @@ def _compute_swisseph_natal(
         cusps12: list[float] | None = None
         asc_lon = mc_lon = None
         if with_houses:
-            cusps_arr, ascmc = swe.houses(jd, lat_deg, lon_deg, b"P")
+            cusps_arr, ascmc = swe.houses(jd, lat_deg, lon_deg, hsys)
             cusps12 = [float(cusps_arr[i]) % 360.0 for i in range(1, 13)]
             asc_lon = float(ascmc[0]) % 360.0
             mc_lon = float(ascmc[1]) % 360.0
@@ -244,13 +287,17 @@ def _compute_swisseph_natal(
         return None
 
 
-def _natal_aspects(planets: list[PlanetPoint]) -> list[tuple[str, str, int, str, float]]:
+def _natal_aspects(
+    planets: list[PlanetPoint],
+    *,
+    allow_minor: bool = True,
+) -> list[tuple[str, str, int, str, float]]:
     out: list[tuple[str, str, int, str, float]] = []
     for i in range(len(planets)):
         for j in range(i + 1, len(planets)):
             a = planets[i]
             b = planets[j]
-            m = _aspect_match(a.lon, b.lon, a.key, b.key)
+            m = _aspect_match(a.lon, b.lon, a.key, b.key, allow_minor=allow_minor)
             if m:
                 angle, tag, orb = m
                 out.append((a.key, b.key, angle, tag, orb))
@@ -289,7 +336,7 @@ def _transit_hits(
             for nk, np in natal_by_key.items():
                 if nk == tkey:
                     continue
-                m = _aspect_match(tlon, np.lon, tkey, nk)
+                m = _aspect_match(tlon, np.lon, tkey, nk, allow_minor=False)
                 if m:
                     angle, tag, orb = m
                     hits.append((tkey, nk, angle, tag, orb))
@@ -302,10 +349,26 @@ def _transit_hits(
 
 def _aspect_label(tag: str, lang: Lang) -> str:
     if lang == "en":
-        return {"conj": "conj", "sext": "sextile", "sq": "square", "tri": "trine", "opp": "opposition"}.get(
-            tag, tag
-        )
-    return {"conj": "kavuşum", "sext": "altılık", "sq": "kare", "tri": "üçgen", "opp": "karşıt"}.get(tag, tag)
+        return {
+            "conj": "conj",
+            "sext": "sextile",
+            "sq": "square",
+            "tri": "trine",
+            "opp": "opposition",
+            "semi": "semi-sextile",
+            "sq45": "semi-square",
+            "qcx": "quincunx",
+        }.get(tag, tag)
+    return {
+        "conj": "kavuşum",
+        "sext": "altılık",
+        "sq": "kare",
+        "tri": "üçgen",
+        "opp": "karşıt",
+        "semi": "yarım-altılık",
+        "sq45": "yarım-kare",
+        "qcx": "quincunx",
+    }.get(tag, tag)
 
 
 def _planet_label(key: str, lang: Lang) -> str:
@@ -321,6 +384,7 @@ def _planet_label(key: str, lang: Lang) -> str:
         "Neptune": "Neptün",
         "Pluto": "Plüton",
         "MeanNode": "Ay Düğümü (Ort.)",
+        "TrueNode": "Ay Düğümü (Gerçek)",
         "Chiron": "Kiron",
     }
     if lang == "en":
@@ -335,12 +399,57 @@ def _synastry_cross_aspects(
     out: list[tuple[str, str, int, str, float]] = []
     for a in planets_a:
         for b in planets_b:
-            m = _aspect_match(a.lon, b.lon, a.key, b.key)
+            m = _aspect_match(a.lon, b.lon, a.key, b.key, allow_minor=False)
             if m:
                 angle, tag, orb = m
                 out.append((a.key, b.key, angle, tag, orb))
     out.sort(key=lambda x: x[4])
     return out
+
+
+TROPICAL_YEAR_SEC = 365.24219 * 86400.0
+
+
+def _secondary_progression_utc(birth_utc: datetime, ref_utc: datetime) -> datetime:
+    if ref_utc <= birth_utc:
+        return birth_utc
+    years = (ref_utc - birth_utc).total_seconds() / TROPICAL_YEAR_SEC
+    return birth_utc + timedelta(days=years)
+
+
+def _progression_body_lines(
+    birth_utc: datetime,
+    ref_utc: datetime,
+    lang: Lang,
+) -> list[str]:
+    prog = _secondary_progression_utc(birth_utc, ref_utc)
+    try:
+        import swisseph as swe
+    except ImportError:
+        return []
+    try:
+        swe.set_ephe_path("")
+        y, m, d = prog.year, prog.month, prog.day
+        ut = prog.hour + prog.minute / 60.0 + prog.second / 3600.0 + prog.microsecond / 3.6e9
+        jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
+        flg = swe.FLG_SWIEPH | swe.FLG_SPEED
+        lines: list[str] = []
+        for pid, key in ((swe.SUN, "Sun"), (swe.MOON, "Moon")):
+            xx, _ = swe.calc_ut(jd, pid, flg)
+            lon = float(xx[0]) % 360.0
+            si = _sign_index(lon)
+            plab = _planet_label(key, lang)
+            sn = sign_name(si, lang)
+            if lang == "en":
+                lines.append(f"- Secondary progression (day-for-year): {plab} ~{lon:.2f}° {sn} at prog. UTC {prog.isoformat(timespec='minutes')}")
+            else:
+                lines.append(
+                    f"- Sekonder ilerletme (gün=yıl): {plab} ~{lon:.2f}° {sn} (ilerletme UTC {prog.isoformat(timespec='minutes')})"
+                )
+        return lines
+    except Exception:
+        logger.exception("İlerletme hesabı")
+        return []
 
 
 def build_synastry_context(
@@ -433,18 +542,23 @@ def build_computed_chart_context(
     lat_deg = float(profile.lat)
     lon_deg = float(profile.lon)
     has_time = profile.birth_time is not None
+    hsys = house_system_to_bytes(profile.house_system)
+    hs_disp = house_system_display(profile.house_system, lang)
 
-    natal = _compute_swisseph_natal(dt_utc, lat_deg, lon_deg, with_houses=has_time)
+    natal = _compute_swisseph_natal(dt_utc, lat_deg, lon_deg, with_houses=has_time, hsys=hsys)
     if natal and not natal[0]:
         natal = None
     lines: list[str] = []
 
     if natal:
         planets, cusps, asc_lon, mc_lon, src = natal
-        aspects = _natal_aspects(planets)
+        aspects_all = _natal_aspects(planets, allow_minor=True)
+        maj_tags = frozenset({"conj", "sext", "sq", "tri", "opp"})
+        aspects_maj = [x for x in aspects_all if x[3] in maj_tags]
+        aspects_min = [x for x in aspects_all if x[3] not in maj_tags]
         if lang == "en":
             lines.append("=== COMPUTED_ASTRO_DATA (tropical; trust positions below) ===")
-            lines.append(f"Source: {src}. House system: {HOUSE_SYSTEM}.")
+            lines.append(f"Source: {src}. House system: {hs_disp}.")
             lines.append(f"Birth UTC: {dt_utc.isoformat(timespec='seconds')}.")
             if not has_time:
                 lines.append(
@@ -454,7 +568,7 @@ def build_computed_chart_context(
                 lines.append("Birth time present: houses and Asc computed.")
         else:
             lines.append("=== HESAPLANMIŞ_ASTRO_VERİSİ (tropikal; aşağıdaki konumlara güven) ===")
-            lines.append(f"Kaynak: {src}. Ev sistemi: {HOUSE_SYSTEM}.")
+            lines.append(f"Kaynak: {src}. Ev sistemi: {hs_disp}.")
             lines.append(f"Doğum UTC: {dt_utc.isoformat(timespec='seconds')}.")
             if not has_time:
                 lines.append(
@@ -493,14 +607,35 @@ def build_computed_chart_context(
                 lines.append(f"- H{hi}: {sign_name(ci, lang)} ~{c:.2f}°")
 
         lines.append("Major natal aspects (orb°):")
-        if not aspects:
+        if not aspects_maj:
             lines.append("- (none under current orbs)" if lang == "en" else "- (mevcut orb altında yok)")
         else:
-            for a, b, ang, tag, orb in aspects[:24]:
+            for a, b, ang, tag, orb in aspects_maj[:22]:
                 al = _planet_label(a, lang)
                 bl = _planet_label(b, lang)
                 lab = _aspect_label(tag, lang)
                 lines.append(f"- {al} {lab} ({ang}°) {bl} — orb {orb:.2f}°")
+
+        if aspects_min:
+            lines.append(
+                "Minor natal aspects (semi-sextile / semi-square / quincunx):"
+                if lang == "en"
+                else "Minör natal açılar (yarım-altılık / yarım-kare / quincunx):"
+            )
+            for a, b, ang, tag, orb in aspects_min[:14]:
+                al = _planet_label(a, lang)
+                bl = _planet_label(b, lang)
+                lab = _aspect_label(tag, lang)
+                lines.append(f"- {al} {lab} ({ang}°) {bl} — orb {orb:.2f}°")
+
+        prog_lines = _progression_body_lines(dt_utc, datetime.now(timezone.utc), lang)
+        if prog_lines:
+            lines.append(
+                "Secondary progression (day-for-year), Sun/Moon only:"
+                if lang == "en"
+                else "Sekonder ilerletme (gün=yıl), yalnızca Güneş/Ay:"
+            )
+            lines.extend(prog_lines)
 
         if include_transits:
             now = datetime.now(timezone.utc)
@@ -553,13 +688,18 @@ def format_chart_text(profile: UserProfile, lang: Lang) -> str:
     lat_deg = float(profile.lat)
     lon_deg = float(profile.lon)
     has_time = profile.birth_time is not None
+    hsys = house_system_to_bytes(profile.house_system)
 
-    natal = _compute_swisseph_natal(dt_utc, lat_deg, lon_deg, with_houses=has_time)
+    natal = _compute_swisseph_natal(dt_utc, lat_deg, lon_deg, with_houses=has_time, hsys=hsys)
     if natal and not natal[0]:
         natal = None
     if natal:
         planets, _cusps, asc_lon, _mc, src = natal
-        aspects = _natal_aspects(planets)[:10]
+        aspects_all = _natal_aspects(planets, allow_minor=True)
+        maj_tags = frozenset({"conj", "sext", "sq", "tri", "opp"})
+        aspects_maj = [x for x in aspects_all if x[3] in maj_tags][:8]
+        aspects_min = [x for x in aspects_all if x[3] not in maj_tags][:4]
+        aspects = aspects_maj + aspects_min
         parts: list[str] = []
         if lang == "en":
             parts.append(f"<b>Chart summary ({src}, tropical)</b>")

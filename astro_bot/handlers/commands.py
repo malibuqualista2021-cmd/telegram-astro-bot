@@ -12,6 +12,7 @@ from astro_bot.handlers import keyboards as kb
 from astro_bot.i18n import Lang, get_lang, t
 from astro_bot.services.chart_service import build_synastry_context, format_chart_text
 from astro_bot.services.faq_service import FaqService
+from astro_bot.services.expert_style import AstroStyle
 from astro_bot.services.profile_service import (
     clear_all_user_chart_data,
     clear_partner,
@@ -108,6 +109,12 @@ async def profil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
     lines.append(f"• lat/lon: {p.lat:.4f}, {p.lon:.4f}")
     lines.append(f"• tz: {p.tz_name}")
+    lines.append(
+        f"• house system: {p.house_system}" if lang == "en" else f"• ev sistemi: {p.house_system}"
+    )
+    st = context.user_data.get("astro_style")
+    if isinstance(st, str) and st != "balanced":
+        lines.append(f"• style: {st}" if lang == "en" else f"• üslup: {st}")
     pp = partner_from_user_data(context.user_data)
     if pp.birth_date:
         lines.append("" if lang == "en" else "")
@@ -293,6 +300,75 @@ async def sinastri_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(text[:4090])
 
 
+_STIL_ALIASES: dict[str, AstroStyle] = {
+    "dengeli": "balanced",
+    "balanced": "balanced",
+    "varsayilan": "balanced",
+    "klasik": "classical",
+    "classical": "classical",
+    "geleneksel": "classical",
+    "psikolojik": "psychological",
+    "psychological": "psychological",
+    "populer": "popular",
+    "popular": "popular",
+    "modern": "popular",
+}
+
+
+async def stil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("stil_usage", lang))
+        return
+    raw = context.args[0].strip().lower()
+    style = _STIL_ALIASES.get(raw)
+    if not style:
+        await update.message.reply_text(t("stil_bad", lang))
+        return
+    context.user_data["astro_style"] = style
+    lab = (
+        {"balanced": "Balanced", "classical": "Classical", "psychological": "Psychological", "popular": "Popular"}
+        if lang == "en"
+        else {"balanced": "Dengeli", "classical": "Klasik", "psychological": "Psikolojik", "popular": "Popüler"}
+    )
+    await update.message.reply_text(t("stil_ok", lang, label=lab[style]), parse_mode=ParseMode.HTML)
+
+
+_HOUSE_ALIASES = {
+    "placidus": "placidus",
+    "p": "placidus",
+    "whole": "whole",
+    "wholesign": "wholesign",
+    "tam": "wholesign",
+    "equal": "equal",
+    "esit": "equal",
+    "koch": "koch",
+    "campanus": "campanus",
+    "regiomontanus": "regiomontanus",
+    "regio": "regiomontanus",
+    "porphyry": "porphyry",
+    "porfiri": "porphyry",
+}
+
+
+async def evsistemi_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("evsistemi_usage", lang))
+        return
+    raw = context.args[0].strip().lower()
+    hs = _HOUSE_ALIASES.get(raw)
+    if not hs:
+        await update.message.reply_text(t("evsistemi_bad", lang))
+        return
+    save_profile(context.user_data, house_system=hs)
+    await update.message.reply_text(t("evsistemi_ok", lang, hs=hs), parse_mode=ParseMode.HTML)
+
+
 async def sil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -367,3 +443,5 @@ def register_command_handlers(application: Application) -> None:
     application.add_handler(CommandHandler(["psil", "pclearpartner"], psil_command))
     application.add_handler(CommandHandler(["sinastri", "synastry"], sinastri_command))
     application.add_handler(CommandHandler(["sil", "delete_my_data"], sil_command))
+    application.add_handler(CommandHandler(["stil", "style"], stil_command))
+    application.add_handler(CommandHandler(["evsistemi", "housesystem"], evsistemi_command))

@@ -25,10 +25,18 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     uid = query.from_user.id if query.from_user else 0
     cid = query.message.chat_id if query.message else 0
     helpful = query.data == "fb:1"
-    if store:
-        await store.log(uid, cid, helpful)
     lang = get_lang(context.user_data.get("lang"))
-    await query.answer("Teşekkürler!" if lang == "tr" else "Thanks!")
+    if helpful:
+        if store:
+            await store.log(uid, cid, True)
+        await query.answer("Teşekkürler!" if lang == "tr" else "Thanks!")
+        return
+    if store:
+        await store.log(uid, cid, False)
+    context.user_data["pending_feedback"] = True
+    await query.answer()
+    if query.message:
+        await query.message.reply_text(t("feedback_why", lang))
 
 
 async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

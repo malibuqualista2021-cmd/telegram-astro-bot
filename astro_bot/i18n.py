@@ -41,6 +41,8 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/sinastri — Çapraz açı listesi\n"
             "/psil — Partner verisini sil\n"
             "/sil — Tüm doğum/sohbet/not verisini sil (dil kalır)\n"
+            "/stil klasik|psikolojik|populer|dengeli — Yorum üslubu\n"
+            "/evsistemi placidus|whole|equal|koch|… — Ev sistemi\n"
             "/sss — SSS\n"
             "/burclar — 12 burç tarihleri\n"
             "/hakkinda — Sorumluluk reddi\n\n"
@@ -66,7 +68,11 @@ MESSAGES: dict[str, dict[str, str]] = {
             "<b>Astroloji asistanı</b>\n"
             "Eğlence ve genel kültür amaçlıdır. /harita Swiss Ephemeris (veya yedek ephem) ile hesaplanır; "
             "profesyonel danışmanlık yerine geçmez.\n\n"
-            "Veriler Telegram ve LLM sağlayıcısına gidebilir."
+            "<b>Veri</b>\n"
+            "• Profil, partner, notlar ve üslup tercihin sunucuda (SQLite/Postgres) saklanabilir.\n"
+            "• Sohbet özeti ve yerel bilgi dosyalarından kesitler LLM’e gidebilir.\n"
+            "• /sil ile profil, partner, notlar, üslup ve sohbet özeti silinir (dil kalır).\n\n"
+            "Telegram ve LLM sağlayıcısı gizlilik politikalarına da bak."
         ),
         "burclar": (
             "<b>12 burç</b> (yaklaşık Güneş tarihleri)\n\n"
@@ -95,7 +101,19 @@ MESSAGES: dict[str, dict[str, str]] = {
         "psil_ok": "Partner astro verisi silindi.",
         "sinastri_need": "Önce senin /dogum ve partner /pdogum (gerekirse /psaat /pkonum /ptz).",
         "sinastri_empty": "Sinastri hesaplanamadı (Swiss Ephemeris gerekli veya veri eksik).",
-        "sil_ok": "Profil, partner, sohbet özeti ve notların silindi. Dil ayarın aynı kaldı.",
+        "sil_ok": "Profil, partner, üslup, sohbet özeti ve notların silindi. Dil ayarın aynı kaldı.",
+        "feedback_why": "Ne geliştirelim? Bir sonraki mesajın kısa geri bildirim olarak kaydedilecek.",
+        "feedback_saved": "Geri bildirimin not olarak kaydedildi.",
+        "feedback_empty": "Boş mesaj; geri bildirim kaydedilmedi.",
+        "stil_usage": "Kullanım: /stil klasik | psikolojik | populer | dengeli",
+        "stil_bad": "Geçersiz. Örnek: /stil klasik",
+        "stil_ok": "Yorum üslubu: <b>{label}</b>",
+        "evsistemi_usage": (
+            "Kullanım: /evsistemi placidus | whole | equal | koch | campanus | regiomontanus | porphyry\n"
+            "(whole = tam burç evleri)"
+        ),
+        "evsistemi_bad": "Geçersiz ev sistemi. /evsistemi yazınca listeyi gör.",
+        "evsistemi_ok": "Ev sistemi kaydedildi: <b>{hs}</b> (bir sonraki harita hesaplarında kullanılır).",
     },
     "en": {
         "start": (
@@ -118,6 +136,8 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/synastry — Cross-aspect list\n"
             "/pclearpartner — Delete partner data only\n"
             "/sil or /delete_my_data — Wipe birth/chat/notes (keeps language)\n"
+            "/style classical|psychological|popular|balanced — Reading style\n"
+            "/housesystem placidus|whole|equal|koch|… — House system\n"
             "/sss — FAQ\n/burclar — Sign date ranges\n/hakkinda — Disclaimer\n\n"
             "Free text: FAQ first, then LLM. If a profile exists, replies include that context.\n"
             "Tone: say it in plain words (e.g. “facts only”, “chatty”, “daily horoscope style”, “based on my chart”, “horary”) — no extra command.\n\n"
@@ -139,7 +159,11 @@ MESSAGES: dict[str, dict[str, str]] = {
             "<b>Astrology assistant</b>\n"
             "For fun and general culture. /harita uses Swiss Ephemeris when available (otherwise a small ephem fallback). "
             "Not a professional consultation.\n\n"
-            "Data may go to Telegram and the LLM provider."
+            "<b>Data</b>\n"
+            "• Profile, partner, notes, and style prefs may be stored on the server (SQLite/Postgres).\n"
+            "• Chat summaries and snippets from local knowledge files may be sent to the LLM.\n"
+            "• /sil clears profile, partner, notes, style, and chat summary (language kept).\n\n"
+            "See Telegram and your LLM provider privacy policies."
         ),
         "burclar": (
             "<b>12 signs</b> (approximate Sun dates)\n\n"
@@ -168,7 +192,16 @@ MESSAGES: dict[str, dict[str, str]] = {
         "psil_ok": "Partner astro data cleared.",
         "sinastri_need": "Set your /dogum and partner /pbirth first (optionally /ptime /ploc /ptimezone).",
         "sinastri_empty": "Could not compute synastry (need Swiss Ephemeris or more data).",
-        "sil_ok": "Profile, partner, chat summary, and notes cleared. Language setting kept.",
+        "sil_ok": "Profile, partner, style, chat summary, and notes cleared. Language setting kept.",
+        "feedback_why": "What should improve? Your next short message will be saved as feedback.",
+        "feedback_saved": "Thanks — saved as a note for future replies.",
+        "feedback_empty": "Empty message; nothing saved.",
+        "stil_usage": "Usage: /style classical | psychological | popular | balanced",
+        "stil_bad": "Invalid. Example: /style classical",
+        "stil_ok": "Reading style: <b>{label}</b>",
+        "evsistemi_usage": "Usage: /housesystem placidus | whole | equal | koch | campanus | regiomontanus | porphyry",
+        "evsistemi_bad": "Invalid house system. Send /housesystem alone for the list.",
+        "evsistemi_ok": "House system saved: <b>{hs}</b> (used on next chart calculations).",
     },
 }
 

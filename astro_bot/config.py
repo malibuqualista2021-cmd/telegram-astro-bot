@@ -99,6 +99,9 @@ TELEGRAM_BOT_TOKEN: str = _require_env("TELEGRAM_BOT_TOKEN")
 
 LLM_PROVIDER, LLM_API_KEY, LLM_MODEL = _resolve_llm()
 
+# Uzun / sinastri / harita modunda kullanılacak ikinci model (boşsa devre dışı)
+LLM_MODEL_DEEP: str | None = os.getenv("LLM_MODEL_DEEP", "").strip() or None
+
 KNOWLEDGE_DIR: Path = _PROJECT_ROOT / "knowledge"
 FAQ_PATH: Path = KNOWLEDGE_DIR / "faq.json"
 LOGS_DIR: Path = _PROJECT_ROOT / "logs"

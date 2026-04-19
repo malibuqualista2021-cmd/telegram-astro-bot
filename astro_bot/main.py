@@ -13,8 +13,10 @@ from telegram.ext import Application
 from astro_bot import __version__, settings
 from astro_bot.config import (
     FAQ_PATH,
+    KNOWLEDGE_DIR,
     LLM_API_KEY,
     LLM_MODEL,
+    LLM_MODEL_DEEP,
     LLM_PROVIDER,
     LOGS_DIR,
     LOG_LEVEL,
@@ -32,6 +34,7 @@ from astro_bot.handlers.commands import register_command_handlers
 from astro_bot.handlers.messages import register_message_handlers
 from astro_bot.handlers.persistence import register_persistence_handlers
 from astro_bot.services.faq_service import FaqService
+from astro_bot.services.knowledge_rag import KnowledgeRagService
 from astro_bot.services.feedback_store import create_feedback_store
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.rate_limit import ChatRateLimiter
@@ -102,6 +105,8 @@ def main() -> None:
 
     fuzzy = resolved_faq_fuzzy_threshold()
     faq = FaqService(FAQ_PATH, fuzzy_threshold=fuzzy)
+    rag_min = int(os.getenv("KNOWLEDGE_RAG_MIN_SCORE", "62").strip() or "62")
+    knowledge_rag = KnowledgeRagService(KNOWLEDGE_DIR, min_score=rag_min)
     llm_svc = LlmAstrologyService(
         provider=LLM_PROVIDER,
         api_key=LLM_API_KEY,
@@ -122,7 +127,9 @@ def main() -> None:
         .build()
     )
     application.bot_data["faq"] = faq
+    application.bot_data["knowledge_rag"] = knowledge_rag
     application.bot_data["llm"] = llm_svc
+    application.bot_data["llm_model_deep"] = LLM_MODEL_DEEP
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["conversation_turns"] = turns
     application.bot_data["memory_threshold_msgs"] = settings.MEMORY_SUMMARIZE_AT_MSGS

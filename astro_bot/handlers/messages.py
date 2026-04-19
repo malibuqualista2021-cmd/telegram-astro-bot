@@ -30,6 +30,12 @@ from astro_bot.services.profile_service import (
 )
 from astro_bot.services.rate_limit import ChatRateLimiter
 from astro_bot.services.chart_service import build_computed_chart_context, build_synastry_context
+from astro_bot.services.claim_guard import maybe_append_data_footnote
+from astro_bot.services.expert_style import (
+    astro_style_instruction,
+    get_astro_style,
+    parse_astro_style_phrases,
+)
 from astro_bot.services.user_learning import add_learning_note, format_learning_for_llm
 
 logger = logging.getLogger(__name__)
@@ -81,6 +87,21 @@ async def _process_free_text(
     if mode_parsed is not None:
         context.user_data["chat_mode"] = mode_parsed
         logger.info("Konuşma modu güncellendi chat_id=%s mode=%s", chat_id, mode_parsed)
+
+    text = text.strip()
+
+    if context.user_data.pop("pending_feedback", None):
+        if add_learning_note(context.user_data, text):
+            await update.message.reply_text(t("feedback_saved", lang))
+        else:
+            await update.message.reply_text(t("feedback_empty", lang))
+        logger.info("Geri bildirim notu chat_id=%s", chat_id)
+        return
+
+    style_parsed, text = parse_astro_style_phrases(text, lang)
+    if style_parsed is not None:
+        context.user_data["astro_style"] = style_parsed
+        logger.info("astro_style güncellendi chat_id=%s style=%s", chat_id, style_parsed)
 
     text = text.strip()
     remember = re.match(
@@ -175,6 +196,15 @@ async def _process_free_text(
     intent = classify_intent(text, lang)
     mem = (context.user_data.get("memory_summary") or "").strip()
 
+    rag_svc = context.bot_data.get("knowledge_rag")
+    rag_text = ""
+    if rag_svc is not None:
+        try:
+            rag_text = rag_svc.retrieve(text, lang)
+        except Exception:
+            logger.exception("RAG retrieve")
+    style_block = astro_style_instruction(get_astro_style(context.user_data), lang)
+
     horary_context = ""
     if chat_mode == "horary" and update.effective_message:
         msg_dt = update.effective_message.date
@@ -202,7 +232,24 @@ async def _process_free_text(
         intent=intent,
         chat_mode=chat_mode,
         horary_context=horary_context,
+        rag_context=rag_text,
+        expert_style_block=style_block,
+        model_override=(
+            context.bot_data.get("llm_model_deep")
+            if (
+                context.bot_data.get("llm_model_deep")
+                and (
+                    len(text) > 420
+                    or bool(synastry_facts)
+                    or chat_mode == "chart"
+                    or (len(chart_facts) > 2500 if chart_facts else False)
+                )
+            )
+            else None
+        ),
     )
+
+    reply = maybe_append_data_footnote(reply, chart_facts, lang=lang)
 
     await update.message.reply_text(reply, reply_markup=_feedback_keyboard())
     logger.info(

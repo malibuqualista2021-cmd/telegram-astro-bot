@@ -52,6 +52,8 @@ class LlmAstrologyService:
         horary_context: str = "",
         chart_facts: str = "",
         synastry_facts: str = "",
+        rag_context: str = "",
+        expert_style_block: str = "",
         learned_notes: str = "",
     ) -> str:
         base = SYSTEM_PROMPT_EN if lang == "en" else SYSTEM_PROMPT_TR
@@ -70,6 +72,12 @@ class LlmAstrologyService:
         sf = (synastry_facts or "").strip()
         if sf:
             parts.append(sf[:7000])
+        rg = (rag_context or "").strip()
+        if rg:
+            parts.append(rg[:6500])
+        es = (expert_style_block or "").strip()
+        if es:
+            parts.append(es[:2000])
         ln = (learned_notes or "").strip()
         if ln:
             parts.append(ln[:5000])
@@ -187,8 +195,11 @@ class LlmAstrologyService:
         profile_hint: str = "",
         chart_facts: str = "",
         synastry_facts: str = "",
+        rag_context: str = "",
+        expert_style_block: str = "",
         learned_notes: str = "",
         memory_summary: str = "",
+        model_override: str | None = None,
         intent: Intent = "info",
         chat_mode: ChatMode = "default",
         horary_context: str = "",
@@ -208,14 +219,17 @@ class LlmAstrologyService:
             horary_context=horary_context,
             chart_facts=chart_facts,
             synastry_facts=synastry_facts,
+            rag_context=rag_context,
+            expert_style_block=expert_style_block,
             learned_notes=learned_notes,
         )
         is_horary = normalize_chat_mode(chat_mode) == "horary" and bool((horary_context or "").strip())
         suffix = self._user_suffix(lang, horary=is_horary)
+        model_use = (model_override or "").strip() or self._model
 
         if self._provider == "gemini":
-            return await self._reply_gemini(text, history, system, suffix, lang)
-        return await self._reply_openai_compatible(text, history, system, suffix, lang)
+            return await self._reply_gemini(text, history, system, suffix, lang, model_name=model_use)
+        return await self._reply_openai_compatible(text, history, system, suffix, lang, model=model_use)
 
     async def _reply_openai_compatible(
         self,
@@ -224,16 +238,19 @@ class LlmAstrologyService:
         system: str,
         suffix: str,
         lang: str,
+        *,
+        model: str | None = None,
     ) -> str:
         assert self._client is not None
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": text + suffix})
+        use_model = model or self._model
 
         try:
             completion = await self._client.chat.completions.create(
-                model=self._model,
+                model=use_model,
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
                 messages=messages,
@@ -266,6 +283,8 @@ class LlmAstrologyService:
         system: str,
         suffix: str,
         lang: str,
+        *,
+        model_name: str | None = None,
     ) -> str:
         try:
             import google.generativeai as genai
@@ -274,8 +293,9 @@ class LlmAstrologyService:
             return "Gemini için google-generativeai paketi eksik."
 
         genai.configure(api_key=self._api_key)
+        use_name = model_name or self._model
         model = genai.GenerativeModel(
-            self._model,
+            use_name,
             system_instruction=system,
         )
 

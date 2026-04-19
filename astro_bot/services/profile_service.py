@@ -20,6 +20,7 @@ class UserProfile:
     lat: float = DEFAULT_LAT
     lon: float = DEFAULT_LON
     tz_name: str = DEFAULT_TZ
+    house_system: str = "placidus"
 
     def to_llm_hint(self, lang: str) -> str:
         if not self.birth_date:
@@ -74,12 +75,16 @@ def profile_from_user_data(ud: dict[str, Any]) -> UserProfile:
         lat_f, lon_f = DEFAULT_LAT, DEFAULT_LON
     if not isinstance(tz_name, str) or not tz_name.strip():
         tz_name = DEFAULT_TZ
+    hs = raw.get("house_system", "placidus")
+    if not isinstance(hs, str) or not hs.strip():
+        hs = "placidus"
     return UserProfile(
         birth_date=birth_date,
         birth_time=birth_time,
         lat=lat_f,
         lon=lon_f,
         tz_name=tz_name.strip(),
+        house_system=hs.strip().lower(),
     )
 
 
@@ -114,6 +119,7 @@ def clear_all_user_chart_data(ud: dict[str, Any]) -> None:
     """Profil, partner, sohbet, notlar — dil korunur."""
     ud.pop("profile", None)
     ud.pop("partner", None)
+    ud.pop("astro_style", None)
     ud.pop("chat_history", None)
     ud.pop("memory_summary", None)
     ud.pop("learned_notes", None)
