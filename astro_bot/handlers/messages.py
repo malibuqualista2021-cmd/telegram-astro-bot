@@ -30,6 +30,7 @@ from astro_bot.services.profile_service import (
 )
 from astro_bot.services.rate_limit import ChatRateLimiter
 from astro_bot.services.chart_service import build_computed_chart_context, build_synastry_context
+from astro_bot.services.finance_astro_service import build_finance_astro_context
 from astro_bot.services.claim_guard import maybe_append_data_footnote
 from astro_bot.services.expert_style import (
     astro_style_instruction,
@@ -187,6 +188,7 @@ async def _process_free_text(
         hint_parts.append(partner_to_llm_hint(partner_prof, lang))
     hint = "\n\n".join(hint_parts)
     chart_facts = build_computed_chart_context(profile, lang) if profile.birth_date else ""
+    finance_facts = build_finance_astro_context(profile, lang) if profile.birth_date else ""
     synastry_facts = (
         build_synastry_context(profile, partner_prof, lang)
         if profile.birth_date and partner_prof.birth_date
@@ -226,6 +228,7 @@ async def _process_free_text(
         lang=lang,
         profile_hint=hint,
         chart_facts=chart_facts,
+        finance_facts=finance_facts,
         synastry_facts=synastry_facts,
         learned_notes=learned_notes,
         memory_summary=mem,
@@ -241,6 +244,7 @@ async def _process_free_text(
                 and (
                     len(text) > 420
                     or bool(synastry_facts)
+                    or intent == "finance"
                     or chat_mode == "chart"
                     or (len(chart_facts) > 2500 if chart_facts else False)
                 )
@@ -249,7 +253,13 @@ async def _process_free_text(
         ),
         use_chain=bool(
             context.bot_data.get("chain_llm")
-            and (bool(chart_facts) or bool(synastry_facts) or len(text) > 200),
+            and (
+                bool(chart_facts)
+                or bool(synastry_facts)
+                or bool(finance_facts)
+                or len(text) > 200
+                or intent == "finance"
+            ),
         ),
     )
 

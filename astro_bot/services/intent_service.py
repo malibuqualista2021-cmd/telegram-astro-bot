@@ -5,7 +5,25 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-Intent = Literal["info", "horoscope", "joke", "chat", "other"]
+Intent = Literal["info", "horoscope", "joke", "chat", "other", "finance"]
+
+
+def _looks_like_finance(t: str, lang: str) -> bool:
+    if lang == "en":
+        return bool(
+            re.search(
+                r"\b(finance|financial|money|wealth|income|salary|invest|investment|stock|stocks|crypto|bitcoin|ethereum|trading|trader|forex|fx\b|portfolio|debt|budget|revenue|cashflow|rich|millionaire)\b",
+                t,
+                re.I,
+            )
+        )
+    return bool(
+        re.search(
+            r"\b(finans|para|borsa|yatırım|yatirim|kripto|bitcoin|ethereum|döviz|doviz|gelir|maaş|maas|servet|zengin|borç|bütçe|butce|nakit|kazanç|kazanc|fx|dolar|euro|altın)\b",
+            t,
+            re.I,
+        )
+    )
 
 
 def _looks_like_astro_question(t: str, lang: str) -> bool:
@@ -31,6 +49,9 @@ def classify_intent(text: str, lang: str) -> Intent:
     t = text.lower().strip()
     if not t:
         return "other"
+
+    if _looks_like_finance(t, lang):
+        return "finance"
 
     if _looks_like_astro_question(t, lang):
         return "info"
@@ -115,4 +136,14 @@ def intent_instruction(intent: Intent, lang: str) -> str:
         if lang == "en":
             return "Intent: astrology Q&A—follow the main system persona (insightful, specific, not generic blurbs)."
         return "Niyet: astroloji sorusu—ana sistem personasına uy (içgörülü, özgül, klişe değil)."
+    if intent == "finance":
+        if lang == "en":
+            return (
+                "Intent: money/resources/wealth themes—use FINANCE_ASTRO_DATA when present with COMPUTED_ASTRO_DATA. "
+                "Symbolic psychology and timing only; no buy/sell, price targets, tax/legal advice, or guaranteed returns."
+            )
+        return (
+            "Niyet: para/kaynak/servet teması—FINANS_ASTRO_VERİSİ ve HESAPLANMIŞ_ASTRO_VERİSİ varsa onlara dayan. "
+            "Yalnızca sembolik psikoloji ve zamanlama; al-sat, fiyat hedefi, vergi/hukuk, kesin kazanç yok."
+        )
     return ""

@@ -51,6 +51,7 @@ class LlmAstrologyService:
         chat_mode: ChatMode,
         horary_context: str = "",
         chart_facts: str = "",
+        finance_facts: str = "",
         synastry_facts: str = "",
         rag_context: str = "",
         expert_style_block: str = "",
@@ -69,6 +70,9 @@ class LlmAstrologyService:
         cf = (chart_facts or "").strip()
         if cf:
             parts.append(cf[:9000])
+        ff = (finance_facts or "").strip()
+        if ff:
+            parts.append(ff[:2800])
         sf = (synastry_facts or "").strip()
         if sf:
             parts.append(sf[:7000])
@@ -269,6 +273,7 @@ class LlmAstrologyService:
         lang: str = "tr",
         profile_hint: str = "",
         chart_facts: str = "",
+        finance_facts: str = "",
         synastry_facts: str = "",
         rag_context: str = "",
         expert_style_block: str = "",
@@ -287,7 +292,13 @@ class LlmAstrologyService:
             return "Mesajın boş görünüyor. Astroloji hakkında bir soru yazabilirsin."
 
         model_use = (model_override or "").strip() or self._model
-        data_tail = ((chart_facts or "").strip() + "\n" + (synastry_facts or "").strip()).strip()
+        data_tail = (
+            (chart_facts or "").strip()
+            + "\n"
+            + (finance_facts or "").strip()
+            + "\n"
+            + (synastry_facts or "").strip()
+        ).strip()
         plan = ""
         if use_chain and data_tail:
             if self._provider in ("openai", "groq"):
@@ -303,6 +314,7 @@ class LlmAstrologyService:
             normalize_chat_mode(chat_mode),
             horary_context=horary_context,
             chart_facts=chart_facts,
+            finance_facts=finance_facts,
             synastry_facts=synastry_facts,
             rag_context=rag_context,
             expert_style_block=expert_style_block,

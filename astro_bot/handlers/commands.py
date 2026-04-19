@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from telegram import Update
-from telegram.constants import ParseMode
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ChatAction, ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from astro_bot.handlers import keyboards as kb
 from astro_bot.i18n import Lang, get_lang, t
-from astro_bot.services.chart_service import build_synastry_context, format_chart_text
+from astro_bot.services.chart_service import build_computed_chart_context, build_synastry_context, format_chart_text
+from astro_bot.services.claim_guard import maybe_append_data_footnote
 from astro_bot.services.faq_service import FaqService
-from astro_bot.services.expert_style import AstroStyle
+from astro_bot.services.expert_style import AstroStyle, astro_style_instruction, get_astro_style
+from astro_bot.services.finance_astro_service import build_finance_astro_context
+from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.profile_service import (
     clear_all_user_chart_data,
     clear_partner,
@@ -28,10 +31,22 @@ from astro_bot.services.profile_service import (
 from astro_bot.services.user_learning import (
     add_learning_note,
     clear_learning_notes,
+    format_learning_for_llm,
     list_notes_for_user,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _feedback_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("👍", callback_data="fb:1"),
+                InlineKeyboardButton("👎", callback_data="fb:0"),
+            ]
+        ]
+    )
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -191,6 +206,61 @@ async def harita_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     text = format_chart_text(p, lang)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+async def finans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.effective_chat:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    p = profile_from_user_data(context.user_data)
+    if not p.birth_date:
+        await update.message.reply_text(t("chart_need_date", lang))
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    llm: LlmAstrologyService = context.bot_data["llm"]
+    chart_facts = build_computed_chart_context(p, lang, max_chars=3200)
+    finance_facts = build_finance_astro_context(p, lang, max_chars=2600)
+    learned_notes = format_learning_for_llm(context.user_data, lang)
+    rag_svc = context.bot_data.get("knowledge_rag")
+    rag_text = ""
+    if rag_svc is not None:
+        try:
+            q = (
+                "finans astrolojisi 2. ev 8. ev 11. ev Venüs Jüpiter Satürn Şans Noktası"
+                if lang != "en"
+                else "financial astrology 2nd 8th 11th house Venus Jupiter Saturn Part of Fortune"
+            )
+            rag_text = rag_svc.retrieve(q, lang)
+        except Exception:
+            logger.exception("RAG /finans")
+    style_block = astro_style_instruction(get_astro_style(context.user_data), lang)
+    user_msg = (
+        "Doğum haritama göre finans ve kaynaklar astrolojisi özeti ver (sembolik). "
+        "2/8/11 evler, Venüs Jüpiter Satürn, Şans Noktası ve uygun transit vurgularını kullan. "
+        "Yatırım, al-sat, vergi, hukuki sonuç veya kesin kazanç tarihi söyleme."
+        if lang != "en"
+        else (
+            "Give a symbolic financial astrology read from my natal data: emphasize 2nd/8th/11th houses, "
+            "Venus/Jupiter/Saturn, Part of Fortune if computed, and relevant transits. "
+            "No investment/trading/tax/legal advice or dated profit claims."
+        )
+    )
+    reply = await llm.reply(
+        user_msg,
+        history=None,
+        lang=lang,
+        profile_hint=p.to_llm_hint(lang),
+        chart_facts=chart_facts,
+        finance_facts=finance_facts,
+        learned_notes=learned_notes,
+        intent="finance",
+        rag_context=rag_text,
+        expert_style_block=style_block,
+        model_override=context.bot_data.get("llm_model_deep"),
+        use_chain=bool(context.bot_data.get("chain_llm")),
+    )
+    reply = maybe_append_data_footnote(reply, chart_facts, lang=lang)
+    await update.message.reply_text(reply, reply_markup=_feedback_kb())
 
 
 async def sss_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -430,6 +500,7 @@ def register_command_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("saat", saat_command))
     application.add_handler(CommandHandler("konum", konum_command))
     application.add_handler(CommandHandler("harita", harita_command))
+    application.add_handler(CommandHandler(["finans", "finance"], finans_command))
     application.add_handler(CommandHandler("sss", sss_command))
     application.add_handler(CommandHandler("burclar", burclar_command))
     application.add_handler(CommandHandler("hakkinda", hakkinda_command))

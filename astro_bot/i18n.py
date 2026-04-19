@@ -19,7 +19,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "veya dönem enerjileri için yanınızdayım.\n\n"
             "<b>Doğum tarihi</b>, mümkünse <b>saat</b> ve <b>yer</b> yazman yeterli; saat yoksa yine yorum yaparım, "
             "yükselen ve evler daha genel kalabilir.\n\n"
-            "<b>Kısayol:</b> /dogum /saat /konum — /harita ile natal özet (Swiss Ephemeris varsa tam gezegenler + açılar). "
+            "<b>Kısayol:</b> /dogum /saat /konum — /harita natal özet; /finans finans astrolojisi (sembolik, yatırım tavsiyesi değil). "
             "/hatirla /notlarim /notlartemizle — bot seni dinlesin.\n\n"
             "Dil: /lang tr veya /lang en — Menüyü kullan veya doğrudan sorunu yaz."
         ),
@@ -34,6 +34,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/saat HH:MM — Doğum saati (isteğe bağlı)\n"
             "/konum enlem boylam — Örn: 41.01 28.98 (varsayılan İstanbul)\n"
             "/harita — Natal özet (Swiss Ephemeris: gezegenler, evler, açı örnekleri)\n"
+            "/finans — Finans astrolojisi özeti (2/8/11 ev, Venüs–Jüpiter–Satürn; sembolik)\n"
             "/hatirla … veya hatırla: … — Tercih/düzeltme kaydet\n"
             "/notlarim — Kayıtlı notlar\n"
             "/notlartemizle — Notları sil\n"
@@ -120,7 +121,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "<b>Hello!</b> I'm a general astrology info assistant.\n\n"
             "Ask about signs, planets, houses, and chart concepts. I search the local FAQ first, "
             "then use an LLM for a short answer.\n\n"
-            "<b>Profile:</b> /dogum /saat /konum — /harita natal summary (full planets if Swiss Ephemeris is installed). "
+            "<b>Profile:</b> /dogum /saat /konum — /harita natal summary; /finance symbolic financial astrology (not investment advice). "
             "/remember /mynotes /clearnotes — teach the bot your style.\n\n"
             "Language: /lang tr or /lang en — Use the menu below or type your question."
         ),
@@ -131,6 +132,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/dogum YYYY-MM-DD — Birth date\n/saat HH:MM — Birth time (optional)\n"
             "/konum lat lon — e.g. 41.01 28.98 (default Istanbul)\n"
             "/harita — Natal summary (planets; houses if birth time set)\n"
+            "/finance — Financial astrology read (2nd/8th/11th, Venus–Jupiter–Saturn; symbolic)\n"
             "/remember … — Save a preference\n/mynotes — List notes\n/clearnotes — Clear notes\n"
             "/pbirth /ptime /ploc /ptimezone — Partner chart (synastry)\n"
             "/synastry — Cross-aspect list\n"
