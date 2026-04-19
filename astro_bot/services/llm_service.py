@@ -186,6 +186,81 @@ class LlmAstrologyService:
             logger.exception("Gemini özet başarısız")
             return ""
 
+    async def _chain_plan_openai(
+        self,
+        user_msg: str,
+        lang: str,
+        model: str,
+        data_tail: str,
+    ) -> str:
+        if not self._client:
+            return ""
+        sys_en = (
+            "You are a brief planning module for an astrology assistant. "
+            "Output at most 5 short bullets: user intent, which chart facts matter, caveats (missing time, symbolic framing), reply shape. "
+            "No greeting; no emojis."
+        )
+        sys_tr = (
+            "Sen astroloji asistanı için kısa plan modülüsün. En fazla 5 madde: kullanıcı niyeti, hangi harita verisi önemli, "
+            "uyarılar (eksik saat, sembolik çerçeve), yanıt iskeleti. Selam yok; emoji yok."
+        )
+        sys = sys_en if lang == "en" else sys_tr
+        user_blob = f"{user_msg[:2000]}\n\n---\nData excerpt:\n{data_tail[:3000]}"
+        try:
+            completion = await self._client.chat.completions.create(
+                model=model,
+                temperature=0.12,
+                max_tokens=min(240, self._max_tokens),
+                messages=[
+                    {"role": "system", "content": sys},
+                    {"role": "user", "content": user_blob},
+                ],
+            )
+            return (completion.choices[0].message.content or "").strip()[:1600]
+        except Exception:
+            logger.exception("Zincir plan (openai uyumlu) başarısız")
+            return ""
+
+    async def _chain_plan_gemini(
+        self,
+        user_msg: str,
+        lang: str,
+        model_name: str,
+        data_tail: str,
+    ) -> str:
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            return ""
+        genai.configure(api_key=self._api_key)
+        model = genai.GenerativeModel(model_name)
+        prompt = (
+            (user_msg[:2000] + "\n\nData excerpt:\n" + data_tail[:3000])
+            if lang == "en"
+            else (user_msg[:2000] + "\n\nVeri özeti:\n" + data_tail[:3000])
+        )
+        head = (
+            "List at most 5 bullets: intent, relevant chart facts, caveats, reply structure. English only, no fluff."
+            if lang == "en"
+            else "En fazla 5 madde: niyet, ilgili harita verisi, uyarılar, yanıt yapısı. Türkçe, kısa."
+        )
+
+        def _call() -> str:
+            r = model.generate_content(
+                head + "\n\n" + prompt,
+                generation_config={"temperature": 0.12, "max_output_tokens": 256},
+            )
+            try:
+                return (r.text or "").strip()[:1600]
+            except (ValueError, AttributeError):
+                return ""
+
+        try:
+            return await asyncio.to_thread(_call)
+        except Exception:
+            logger.exception("Zincir plan (Gemini) başarısız")
+            return ""
+
     async def reply(
         self,
         user_message: str,
@@ -203,12 +278,22 @@ class LlmAstrologyService:
         intent: Intent = "info",
         chat_mode: ChatMode = "default",
         horary_context: str = "",
+        use_chain: bool = False,
     ) -> str:
         text = (user_message or "").strip()
         if not text:
             if lang == "en":
                 return "Your message looks empty. Ask something about astrology."
             return "Mesajın boş görünüyor. Astroloji hakkında bir soru yazabilirsin."
+
+        model_use = (model_override or "").strip() or self._model
+        data_tail = ((chart_facts or "").strip() + "\n" + (synastry_facts or "").strip()).strip()
+        plan = ""
+        if use_chain and data_tail:
+            if self._provider in ("openai", "groq"):
+                plan = await self._chain_plan_openai(text, lang, model_use, data_tail)
+            elif self._provider == "gemini":
+                plan = await self._chain_plan_gemini(text, lang, model_use, data_tail)
 
         system = self._build_system(
             lang,
@@ -223,9 +308,16 @@ class LlmAstrologyService:
             expert_style_block=expert_style_block,
             learned_notes=learned_notes,
         )
+        if plan:
+            hdr = (
+                "INTERNAL_PLAN (do not paste verbatim; use only for coherence):"
+                if lang == "en"
+                else "İÇ_PLAN (kullanıcıya aynen yapıştırma; yalnızca tutarlılık için):"
+            )
+            system = system + "\n\n=== " + hdr + "\n" + plan
+
         is_horary = normalize_chat_mode(chat_mode) == "horary" and bool((horary_context or "").strip())
         suffix = self._user_suffix(lang, horary=is_horary)
-        model_use = (model_override or "").strip() or self._model
 
         if self._provider == "gemini":
             return await self._reply_gemini(text, history, system, suffix, lang, model_name=model_use)

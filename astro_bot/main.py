@@ -97,10 +97,12 @@ def main() -> None:
     setup_logging()
     log = logging.getLogger(__name__)
     log.info(
-        "Astroloji bot başlıyor (sürüm %s, LLM=%s, model=%s)",
+        "Astroloji bot başlıyor (sürüm %s, LLM=%s, model=%s, deep=%s, chain=%s)",
         __version__,
         LLM_PROVIDER,
         LLM_MODEL,
+        LLM_MODEL_DEEP or "-",
+        os.getenv("CHAIN_LLM", "").strip() or "0",
     )
 
     fuzzy = resolved_faq_fuzzy_threshold()
@@ -130,6 +132,12 @@ def main() -> None:
     application.bot_data["knowledge_rag"] = knowledge_rag
     application.bot_data["llm"] = llm_svc
     application.bot_data["llm_model_deep"] = LLM_MODEL_DEEP
+    application.bot_data["chain_llm"] = os.getenv("CHAIN_LLM", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     application.bot_data["rate_limiter"] = rate_limiter
     application.bot_data["conversation_turns"] = turns
     application.bot_data["memory_threshold_msgs"] = settings.MEMORY_SUMMARIZE_AT_MSGS

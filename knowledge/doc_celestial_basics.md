@@ -24,3 +24,9 @@ Bu dosya botun yerel bilgi araması için özet içerir; kişisel harita yerine 
 ## English (short)
 
 Signs group by element (fire, earth, air, water). Houses 1–12 map life areas from self to collective/spiritual closure. Natal chart is a snapshot of ecliptic longitudes from a time and place; interpretations are symbolic frameworks, not deterministic fate.
+
+## İleri teknikler (özet)
+
+- **Sekonder ilerletme:** doğumdan sonra her tropikal yıl ≈ bir günlük efemeris ilerlemesi (sembolik “gün=yıl”).
+- **Solar arc:** natal Güneş’e yıllık ortalama ekliptik hareket eklenerek sembolik zamanlama (yaklaşık ~0,986°/yıl).
+- **Sabit yıldızlar:** seçili yıldızların gezegen/aks ile dar orb kavuşumları; efemeris dosyası (`sefstars.txt`) gerekir.

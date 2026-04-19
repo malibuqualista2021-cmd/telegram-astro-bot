@@ -247,6 +247,10 @@ async def _process_free_text(
             )
             else None
         ),
+        use_chain=bool(
+            context.bot_data.get("chain_llm")
+            and (bool(chart_facts) or bool(synastry_facts) or len(text) > 200),
+        ),
     )
 
     reply = maybe_append_data_footnote(reply, chart_facts, lang=lang)

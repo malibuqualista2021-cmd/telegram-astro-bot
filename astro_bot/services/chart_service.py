@@ -452,6 +452,112 @@ def _progression_body_lines(
         return []
 
 
+def _julday_from_utc(dt_utc: datetime) -> float | None:
+    try:
+        import swisseph as swe
+    except ImportError:
+        return None
+    try:
+        swe.set_ephe_path("")
+        y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
+        ut = (
+            dt_utc.hour
+            + dt_utc.minute / 60.0
+            + dt_utc.second / 3600.0
+            + dt_utc.microsecond / 3.6e9
+        )
+        return float(swe.julday(y, m, d, ut, swe.GREG_CAL))
+    except Exception:
+        logger.exception("JD hesabı")
+        return None
+
+
+def _solar_arc_sun_lines(
+    natal_sun_deg: float,
+    birth_utc: datetime,
+    ref_utc: datetime,
+    lang: Lang,
+) -> list[str]:
+    years = max(0.0, (ref_utc - birth_utc).total_seconds() / TROPICAL_YEAR_SEC)
+    arc_deg = years * 0.98564733
+    sa_lon = (natal_sun_deg + arc_deg) % 360.0
+    si = _sign_index(sa_lon)
+    sn = sign_name(si, lang)
+    if lang == "en":
+        return [
+            "Solar arc Sun (natal Sun + mean ~0.9856°/tropical year; illustrative timing technique):",
+            f"- SA Sun → ~{sa_lon:.2f}° {sn} (elapsed ~{years:.2f} tropical years)",
+        ]
+    return [
+        "Solar arc Güneş (natal Güneş + ort. ~0,9856°/tropikal yıl; örnek zaman tekniği):",
+        f"- SA Güneş → ~{sa_lon:.2f}° {sn} (geçen ~{years:.2f} tropikal yıl)",
+    ]
+
+
+def _fixed_star_conjunction_lines(
+    jd: float,
+    planets: list[PlanetPoint],
+    asc_lon: float | None,
+    mc_lon: float | None,
+    lang: Lang,
+    *,
+    orb_deg: float = 1.2,
+) -> list[str]:
+    try:
+        import swisseph as swe
+    except ImportError:
+        return []
+    try:
+        swe.set_ephe_path("")
+    except Exception:
+        return []
+
+    stars = ("Regulus", "Spica", "Algol", "Aldebaran", "Antares")
+    points: list[tuple[str, float]] = []
+    for p in planets:
+        if p.key in ("Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"):
+            points.append((_planet_label(p.key, lang), p.lon))
+    if asc_lon is not None:
+        points.append(("ASC" if lang == "en" else "Yükselen", asc_lon))
+    if mc_lon is not None:
+        points.append(("MC", mc_lon))
+
+    hits: list[str] = []
+    flg = swe.FLG_SWIEPH
+    for star in stars:
+        slon: float | None = None
+        try:
+            ret = swe.fixstar2_ut(star, jd, flg)
+        except Exception:
+            try:
+                ret = swe.fixstar2_ut(star.encode("utf-8"), jd, flg)
+            except Exception:
+                continue
+        try:
+            xx = ret[0] if isinstance(ret, tuple) and ret else None
+            if xx is not None:
+                slon = float(xx[0]) % 360.0
+        except (TypeError, ValueError, IndexError):
+            continue
+        if slon is None:
+            continue
+        for plab, plon in points:
+            sep = _separation_deg(slon, plon)
+            if sep <= orb_deg:
+                if lang == "en":
+                    hits.append(f"- {star} (~{slon:.2f}°) conj {plab} (~{plon:.2f}°), orb {sep:.2f}°")
+                else:
+                    hits.append(f"- {star} (~{slon:.2f}°) kavuşum {plab} (~{plon:.2f}°), orb {sep:.2f}°")
+    if not hits:
+        return []
+    header = (
+        "Fixed-star conjunctions (tight orb; requires sefstars.txt on ephemeris path):"
+        if lang == "en"
+        else "Sabit yıldız kavuşumları (dar orb; efemeris yolunda sefstars.txt gerekir):"
+    )
+    return [header] + hits[:10]
+
+
 def build_synastry_context(
     user_profile: UserProfile,
     partner_profile: UserProfile,
@@ -627,6 +733,22 @@ def build_computed_chart_context(
                 bl = _planet_label(b, lang)
                 lab = _aspect_label(tag, lang)
                 lines.append(f"- {al} {lab} ({ang}°) {bl} — orb {orb:.2f}°")
+
+        sun_lon = next((p.lon for p in planets if p.key == "Sun"), None)
+        if sun_lon is not None:
+            lines.extend(_solar_arc_sun_lines(sun_lon, dt_utc, datetime.now(timezone.utc), lang))
+
+        jd_n = _julday_from_utc(dt_utc)
+        if jd_n is not None:
+            lines.extend(
+                _fixed_star_conjunction_lines(
+                    jd_n,
+                    planets,
+                    asc_lon if has_time else None,
+                    mc_lon if has_time else None,
+                    lang,
+                )
+            )
 
         prog_lines = _progression_body_lines(dt_utc, datetime.now(timezone.utc), lang)
         if prog_lines:

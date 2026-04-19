@@ -14,6 +14,11 @@ _CHUNK_TARGET = 520
 _MAX_CHUNKS_LOAD = 120
 _MAX_OUT_CHARS = 3200
 
+_STOPWORDS = frozenset(
+    "ve bir bu şu o da de mi mu mü the and or for with from that this not are was "
+    "ile ne gibi için birde".split()
+)
+
 
 def _normalize(s: str) -> str:
     t = s.lower().strip()
@@ -95,12 +100,16 @@ class KnowledgeRagService:
         qn = _normalize(query)
         if len(qn) < 4:
             return ""
+        qw = {w for w in qn.split() if len(w) > 2 and w not in _STOPWORDS}
         scored: list[tuple[int, str, str]] = []
         for src, chunk in self._chunks:
             cn = _normalize(chunk)
             s1 = fuzz.partial_ratio(qn, cn)
             s2 = fuzz.token_set_ratio(qn, cn)
-            score = max(s1, s2)
+            cw = {w for w in cn.split() if len(w) > 2 and w not in _STOPWORDS}
+            overlap = len(qw & cw)
+            bonus = min(18, overlap * 3)
+            score = max(s1, s2) + bonus
             if score >= self._min_score:
                 scored.append((score, src, chunk))
         scored.sort(key=lambda x: -x[0])
