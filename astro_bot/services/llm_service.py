@@ -106,6 +106,11 @@ class LlmAstrologyService:
                     "\n\nHorary: önceki mesajındaki harita paragraflarını tekrarlama. "
                     "En fazla 1–2 net soru; sonra kısa özet. Kripto/FX’te al-sat veya kazanç tarihi yok. Kısa yaz."
                 )
+        if lang != "en":
+            base += (
+                "\n\nDil: Kullanıcı Türkçe yazdıysa yanıtın tamamı Türkçe olmalı; "
+                "İngilizce kelime veya İngilizce cümle kullanma (ör. “sometimes”, “impulsive”, “self-discovery” yasak—Türkçe karşılığını yaz)."
+            )
         return base
 
     async def summarize_chunk(
@@ -328,7 +333,7 @@ class LlmAstrologyService:
             )
             system = system + "\n\n=== " + hdr + "\n" + plan
 
-        is_horary = normalize_chat_mode(chat_mode) == "horary" and bool((horary_context or "").strip())
+        is_horary = bool((horary_context or "").strip())
         suffix = self._user_suffix(lang, horary=is_horary)
 
         if self._provider == "gemini":

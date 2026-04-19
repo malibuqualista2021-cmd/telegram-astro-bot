@@ -38,14 +38,32 @@ class UserProfile:
         parts.append(self.tz_name)
         line = " | ".join(parts)
         if lang == "en":
-            return (
+            hint = (
                 f"User birth metadata: {line}. Exact longitudes/houses/aspects appear only in COMPUTED_ASTRO_DATA if present; "
                 "never invent specific degrees or house placements beyond that block."
             )
-        return (
+            if uses_default_coordinates(self):
+                hint += (
+                    " WARNING: coordinates are still default Istanbul—if birth was elsewhere, Asc/houses are wrong until /konum is set."
+                )
+            return hint
+        hint = (
             f"Kullanıcı doğum meta verisi: {line}. Kesin derece/ev/açılar yalnızca varsa HESAPLANMIŞ_ASTRO_VERİSİ bloğunda; "
             "o blok dışında somut konum uydurma."
         )
+        if uses_default_coordinates(self):
+            hint += (
+                " UYARI: koordinatlar varsayılan İstanbul; doğum yeri farklıysa yükselen/evler yanlış — /konum ile güncellenmeli."
+            )
+        return hint
+
+
+def uses_default_coordinates(profile: UserProfile, *, eps: float = 1e-4) -> bool:
+    """Kullanıcı /konum vermediyse yükselen ve evler varsayılan İstanbul koordinatına göre hesaplanır."""
+    try:
+        return abs(float(profile.lat) - DEFAULT_LAT) < eps and abs(float(profile.lon) - DEFAULT_LON) < eps
+    except (TypeError, ValueError):
+        return False
 
 
 def profile_from_user_data(ud: dict[str, Any]) -> UserProfile:

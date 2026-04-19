@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from astro_bot.i18n import Lang
-from astro_bot.services.profile_service import UserProfile, observer_datetime
+from astro_bot.services.profile_service import UserProfile, observer_datetime, uses_default_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -666,22 +666,38 @@ def build_computed_chart_context(
             lines.append("=== COMPUTED_ASTRO_DATA (tropical; trust positions below) ===")
             lines.append(f"Source: {src}. House system: {hs_disp}.")
             lines.append(f"Birth UTC: {dt_utc.isoformat(timespec='seconds')}.")
+            lines.append(
+                f"Birth timezone (IANA): {profile.tz_name} — interpret stored birth time as local civil wall-clock there."
+            )
             if not has_time:
                 lines.append(
                     "No birth time: houses/Asc not computed; planet signs use local noon placeholder time — Moon sign may differ from midnight chart."
                 )
             else:
                 lines.append("Birth time present: houses and Asc computed.")
+            if uses_default_coordinates(profile):
+                lines.append(
+                    "LOCATION WARNING: coordinates are still the default Istanbul anchor. "
+                    "Ascendant and houses are sensitive—set /konum to birth city (lat lon) if not Istanbul."
+                )
         else:
             lines.append("=== HESAPLANMIŞ_ASTRO_VERİSİ (tropikal; aşağıdaki konumlara güven) ===")
             lines.append(f"Kaynak: {src}. Ev sistemi: {hs_disp}.")
             lines.append(f"Doğum UTC: {dt_utc.isoformat(timespec='seconds')}.")
+            lines.append(
+                f"Doğum zaman dilimi (IANA): {profile.tz_name} — kayıtlı saat o bölgede duvar saati (sivil yerel saat) olarak alınır."
+            )
             if not has_time:
                 lines.append(
                     "Doğum saati yok: yükselen/evler hesaplanmadı; gezegen burçları yerel öğlen varsayımıyla — Ay burcu gece/gündüz farkına göre değişebilir."
                 )
             else:
                 lines.append("Doğum saati var: yükselen ve evler hesaplandı.")
+            if uses_default_coordinates(profile):
+                lines.append(
+                    "KONUM UYARISI: koordinatlar hâlâ varsayılan İstanbul. Yükselen ve evler konuma çok duyarlı; "
+                    "doğum yeri İstanbul değilse /konum ile enlem boylam gir (ör. Adana 37.00 35.32)."
+                )
 
         if has_time and asc_lon is not None:
             ai = _sign_index(asc_lon)

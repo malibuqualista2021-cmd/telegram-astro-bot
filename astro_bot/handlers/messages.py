@@ -14,6 +14,7 @@ from telegram.ext import Application, ContextTypes, MessageHandler, filters
 from astro_bot import settings
 from astro_bot.i18n import get_lang, t
 from astro_bot.services.conversation_mode import (
+    message_requests_horary,
     mode_ack_message,
     normalize_chat_mode,
     parse_chat_mode_phrases,
@@ -159,7 +160,9 @@ async def _process_free_text(
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
-    faq_ans = faq.find_answer(text, lang)
+    intent = classify_intent(text, lang)
+    skip_faq = message_requests_horary(text, lang) or intent == "finance"
+    faq_ans = None if skip_faq else faq.find_answer(text, lang)
     if faq_ans:
         await update.message.reply_text(faq_ans)
         logger.info("Yanıt kaynağı=SSS chat_id=%s", chat_id)
@@ -195,7 +198,6 @@ async def _process_free_text(
         else ""
     )
     learned_notes = format_learning_for_llm(context.user_data, lang)
-    intent = classify_intent(text, lang)
     mem = (context.user_data.get("memory_summary") or "").strip()
 
     rag_svc = context.bot_data.get("knowledge_rag")
@@ -208,7 +210,8 @@ async def _process_free_text(
     style_block = astro_style_instruction(get_astro_style(context.user_data), lang)
 
     horary_context = ""
-    if chat_mode == "horary" and update.effective_message:
+    want_horary = chat_mode == "horary" or message_requests_horary(text, lang)
+    if want_horary and update.effective_message:
         msg_dt = update.effective_message.date
         if msg_dt.tzinfo is None:
             msg_dt = msg_dt.replace(tzinfo=timezone.utc)
@@ -247,6 +250,7 @@ async def _process_free_text(
                     or intent == "finance"
                     or chat_mode == "chart"
                     or (len(chart_facts) > 2500 if chart_facts else False)
+                    or bool(horary_context and horary_context.strip())
                 )
             )
             else None
@@ -257,6 +261,7 @@ async def _process_free_text(
                 bool(chart_facts)
                 or bool(synastry_facts)
                 or bool(finance_facts)
+                or bool(horary_context and horary_context.strip())
                 or len(text) > 200
                 or intent == "finance"
             ),

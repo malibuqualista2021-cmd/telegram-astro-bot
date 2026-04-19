@@ -32,6 +32,8 @@ _PATTERNS_TR: list[tuple[re.Pattern[str], ChatMode]] = [
     (re.compile(r"\bprofilime\s+göre\b", re.I), "chart"),
     (re.compile(r"\bnatal(?:e)?\s+haritam(?:a|ı)?\s+göre\b", re.I), "chart"),
     (re.compile(r"\bhorary\b", re.I), "horary"),
+    (re.compile(r"\bhorary\s+açısından\b", re.I), "horary"),
+    (re.compile(r"\bhorary\s+acisindan\b", re.I), "horary"),
     (re.compile(r"\bsaat\s+astrolojisi(?:\s+modu)?\b", re.I), "horary"),
     (re.compile(r"\bsoru\s+haritası(?:\s+modu)?\b", re.I), "horary"),
     (re.compile(r"\bsoru\s+anı\s+haritası\b", re.I), "horary"),
@@ -59,6 +61,36 @@ _PATTERNS_EN: list[tuple[re.Pattern[str], ChatMode]] = [
 
 def _normalize_ws(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
+
+
+def message_requests_horary(text: str, lang: str) -> bool:
+    """Metin horary / soru anı haritası istiyorsa True (kalıcı moda bağlı değil)."""
+    t = (text or "").lower()
+    if not t.strip():
+        return False
+    if lang == "en":
+        return bool(
+            re.search(
+                r"\bhorary\b|question\s+chart|chart\s+of\s+the\s+moment|radix\s+of\s+the\s+moment",
+                t,
+                re.I,
+            )
+        )
+    return bool(
+        re.search(
+            r"\bhorary\b|"
+            r"saat\s+astrolojisi|"
+            r"soru\s+haritası|soru\s+haritasi|"
+            r"soru\s+anı|soru\s+ani|"
+            r"anın\s+haritası|anin\s+haritasi|"
+            r"anın\s+haritasında|anin\s+haritasinda|"
+            r"horary\s+açısından|horary\s+acisindan|"
+            r"bu\s+soruyu\s+horary|"
+            r"horary\s+olarak",
+            t,
+            re.I,
+        )
+    )
 
 
 def parse_chat_mode_phrases(text: str, lang: str) -> tuple[ChatMode | None, str]:

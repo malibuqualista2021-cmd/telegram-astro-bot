@@ -242,7 +242,7 @@ def format_horary_context(
 
     rh = _house_placidus(ruler_lon, cusps) if cusps is not None else _house_whole_sign(ruler_lon, asc)
     if cusps is not None:
-        c7_lon = float(c12[6]) % 360
+        c7_lon = float(cusps[6]) % 360
         sig7_idx = _sign_idx(c7_lon)
     else:
         sig7_idx = (asc_idx + 6) % 12
@@ -292,6 +292,8 @@ def format_horary_context(
             lines.extend(asp_lines)
         lines.append(
             "INTERPRETATION RULES: Tie sentences to Asc ruler, Moon, 7th-house line, aspects—no generic blurbs. "
+            "CRITICAL: This block is the QUESTION-MOMENT chart only. If COMPUTED_ASTRO_DATA / natal data also appears, "
+            "never assign natal Moon/Sun/houses to this moment; cite ONLY this block for ‘now / chart of the question’ placements. "
             "FORBIDDEN: repeating the same placement paragraph you already wrote in your last reply (copy-paste loop); "
             "at most one short callback. Max 1–2 clarifying questions per thread turn; once the user answers, give a concise "
             "symbolic synthesis / ‘lean’—do not chain endless finer questions (which market, which pair, which strategy). "
@@ -318,6 +320,8 @@ def format_horary_context(
             lines.extend(asp_lines)
         lines.append(
             "YORUM KURALLARI: Yükselen yöneticisi, Ay, 7. ev hattı ve açıları birlikte oku; her iddiayı veriye bağla. "
+            "KRİTİK: Bu blok yalnızca SORU ANI haritasıdır. Sistemde COMPUTED_ASTRO_DATA / doğum verisi de varsa, "
+            "natal Ay/Güneş/evleri soru anıyla ASLA karıştırma; ‘şimdi / soru haritası’ için yalnızca bu bloktaki konumları kullan. "
             "YASAK: bir önceki mesajındaki aynı gezegen-ev paragraflarını baştan aynen tekrarlamak (kopyala-yapıştır döngüsü); "
             "en fazla tek cümleyle hatırlat. Netleştirici soru bu turda en fazla 1–2; kullanıcı cevap verdiyse sembolik özet ve "
             "sorunun eğilimi ile ilerle—sonsuz alt soru (hangi parite, hangi strateji) ile bitirme. "

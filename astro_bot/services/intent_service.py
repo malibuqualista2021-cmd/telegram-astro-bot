@@ -19,7 +19,7 @@ def _looks_like_finance(t: str, lang: str) -> bool:
         )
     return bool(
         re.search(
-            r"\b(finans|para|borsa|yatırım|yatirim|kripto|bitcoin|ethereum|döviz|doviz|gelir|maaş|maas|servet|zengin|borç|bütçe|butce|nakit|kazanç|kazanc|fx|dolar|euro|altın)\b",
+            r"\b(finans|finansal|para|borsa|piyasa|piyasalar|yatırım|yatirim|kripto|bitcoin|ethereum|döviz|doviz|gelir|maaş|maas|servet|zengin|borç|bütçe|butce|nakit|kazanç|kazanc|gösterge|gosterge|fx|dolar|euro|altın)\b",
             t,
             re.I,
         )
