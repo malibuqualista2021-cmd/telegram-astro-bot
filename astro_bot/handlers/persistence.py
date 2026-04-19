@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.constants import ChatType
 from telegram.ext import Application, ContextTypes, TypeHandler
 
-from astro_bot.services.user_store import UserStore
+from astro_bot.services.user_store import PERSIST_KEYS, UserStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,8 @@ async def load_user_persistence(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if not data:
         return
+    for k in PERSIST_KEYS:
+        context.user_data.pop(k, None)
     for k, v in data.items():
         if v is not None:
             context.user_data[k] = v

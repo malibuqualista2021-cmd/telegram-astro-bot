@@ -19,7 +19,8 @@ MESSAGES: dict[str, dict[str, str]] = {
             "veya dönem enerjileri için yanınızdayım.\n\n"
             "<b>Doğum tarihi</b>, mümkünse <b>saat</b> ve <b>yer</b> yazman yeterli; saat yoksa yine yorum yaparım, "
             "yükselen ve evler daha genel kalabilir.\n\n"
-            "<b>Kısayol:</b> /dogum /saat /konum — /harita ile eğitim amaçlı Güneş/Ay/Yükselen özeti.\n\n"
+            "<b>Kısayol:</b> /dogum /saat /konum — /harita ile natal özet (Swiss Ephemeris varsa tam gezegenler + açılar). "
+            "/hatirla /notlarim /notlartemizle — bot seni dinlesin.\n\n"
             "Dil: /lang tr veya /lang en — Menüyü kullan veya doğrudan sorunu yaz."
         ),
         "help": (
@@ -32,7 +33,14 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/dogum YYYY-MM-DD — Doğum tarihi\n"
             "/saat HH:MM — Doğum saati (isteğe bağlı)\n"
             "/konum enlem boylam — Örn: 41.01 28.98 (varsayılan İstanbul)\n"
-            "/harita — Güneş/Ay/Yükselen (eğitim amaçlı, ephem)\n"
+            "/harita — Natal özet (Swiss Ephemeris: gezegenler, evler, açı örnekleri)\n"
+            "/hatirla … veya hatırla: … — Tercih/düzeltme kaydet\n"
+            "/notlarim — Kayıtlı notlar\n"
+            "/notlartemizle — Notları sil\n"
+            "/pdogum /psaat /pkonum /ptz — Partner haritası (sinastri)\n"
+            "/sinastri — Çapraz açı listesi\n"
+            "/psil — Partner verisini sil\n"
+            "/sil — Tüm doğum/sohbet/not verisini sil (dil kalır)\n"
             "/sss — SSS\n"
             "/burclar — 12 burç tarihleri\n"
             "/hakkinda — Sorumluluk reddi\n\n"
@@ -56,8 +64,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "chart_need_date": "Önce /dogum ile tarih gir.",
         "about": (
             "<b>Astroloji asistanı</b>\n"
-            "Eğlence ve genel kültür amaçlıdır. /harita çıktıları ephem ile yaklaşıktır; "
-            "profesyonel harita yerine geçmez.\n\n"
+            "Eğlence ve genel kültür amaçlıdır. /harita Swiss Ephemeris (veya yedek ephem) ile hesaplanır; "
+            "profesyonel danışmanlık yerine geçmez.\n\n"
             "Veriler Telegram ve LLM sağlayıcısına gidebilir."
         ),
         "burclar": (
@@ -69,13 +77,33 @@ MESSAGES: dict[str, dict[str, str]] = {
             "♐ Yay — 22 Kas – 21 Ara\n♑ Oğlak — 22 Ara – 19 Oca\n"
             "♒ Kova — 20 Oca – 18 Şub\n♓ Balık — 19 Şub – 20 Mar"
         ),
+        "hatirla_usage": (
+            "Kullanım: /hatirla Daha kısa ve net yaz\n"
+            "veya mesajda: hatırla: astrolojiyi popüler dille anlat"
+        ),
+        "hatirla_ok": "Kaydedildi. Sonraki yanıtlarda bu tercihi dikkate alacağım.",
+        "hatirla_bad": "Not boş olamaz.",
+        "notlar_cleared": "Tüm notların silindi.",
+        "pdogum_bad": "Kullanım: /pdogum YYYY-MM-DD",
+        "pdogum_ok": "Partner doğum tarihi kaydedildi: {d}",
+        "psaat_bad": "Kullanım: /psaat 14:30",
+        "psaat_ok": "Partner doğum saati kaydedildi: {t}",
+        "pkonum_bad": "Kullanım: /pkonum 41.01 28.98",
+        "pkonum_ok": "Partner konumu kaydedildi: {lat}, {lon}",
+        "ptz_bad": "Kullanım: /ptz Europe/Istanbul (IANA zaman dilimi)",
+        "ptz_ok": "Partner zaman dilimi: {tz}",
+        "psil_ok": "Partner astro verisi silindi.",
+        "sinastri_need": "Önce senin /dogum ve partner /pdogum (gerekirse /psaat /pkonum /ptz).",
+        "sinastri_empty": "Sinastri hesaplanamadı (Swiss Ephemeris gerekli veya veri eksik).",
+        "sil_ok": "Profil, partner, sohbet özeti ve notların silindi. Dil ayarın aynı kaldı.",
     },
     "en": {
         "start": (
             "<b>Hello!</b> I'm a general astrology info assistant.\n\n"
             "Ask about signs, planets, houses, and chart concepts. I search the local FAQ first, "
             "then use an LLM for a short answer.\n\n"
-            "<b>Profile:</b> /dogum /saat /konum for birth data; /harita for an educational Sun/Moon/Asc summary.\n\n"
+            "<b>Profile:</b> /dogum /saat /konum — /harita natal summary (full planets if Swiss Ephemeris is installed). "
+            "/remember /mynotes /clearnotes — teach the bot your style.\n\n"
             "Language: /lang tr or /lang en — Use the menu below or type your question."
         ),
         "help": (
@@ -84,7 +112,12 @@ MESSAGES: dict[str, dict[str, str]] = {
             "/profil — Saved birth info\n"
             "/dogum YYYY-MM-DD — Birth date\n/saat HH:MM — Birth time (optional)\n"
             "/konum lat lon — e.g. 41.01 28.98 (default Istanbul)\n"
-            "/harita — Sun/Moon/Asc (educational, ephem)\n"
+            "/harita — Natal summary (planets; houses if birth time set)\n"
+            "/remember … — Save a preference\n/mynotes — List notes\n/clearnotes — Clear notes\n"
+            "/pbirth /ptime /ploc /ptimezone — Partner chart (synastry)\n"
+            "/synastry — Cross-aspect list\n"
+            "/pclearpartner — Delete partner data only\n"
+            "/sil or /delete_my_data — Wipe birth/chat/notes (keeps language)\n"
             "/sss — FAQ\n/burclar — Sign date ranges\n/hakkinda — Disclaimer\n\n"
             "Free text: FAQ first, then LLM. If a profile exists, replies include that context.\n"
             "Tone: say it in plain words (e.g. “facts only”, “chatty”, “daily horoscope style”, “based on my chart”, “horary”) — no extra command.\n\n"
@@ -104,7 +137,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "chart_need_date": "Set /dogum first.",
         "about": (
             "<b>Astrology assistant</b>\n"
-            "For fun and general culture. /harita uses ephem approximations; not a professional chart.\n\n"
+            "For fun and general culture. /harita uses Swiss Ephemeris when available (otherwise a small ephem fallback). "
+            "Not a professional consultation.\n\n"
             "Data may go to Telegram and the LLM provider."
         ),
         "burclar": (
@@ -116,6 +150,25 @@ MESSAGES: dict[str, dict[str, str]] = {
             "♐ Sagittarius — Nov 22 – Dec 21\n♑ Capricorn — Dec 22 – Jan 19\n"
             "♒ Aquarius — Jan 20 – Feb 18\n♓ Pisces — Feb 19 – Mar 20"
         ),
+        "hatirla_usage": (
+            "Usage: /remember Keep answers shorter\n"
+            "or in chat: remember: explain in plain language"
+        ),
+        "hatirla_ok": "Saved — I’ll apply this in future replies when it fits.",
+        "hatirla_bad": "Note text can’t be empty.",
+        "notlar_cleared": "All your notes were cleared.",
+        "pdogum_bad": "Usage: /pbirth YYYY-MM-DD",
+        "pdogum_ok": "Partner birth date saved: {d}",
+        "psaat_bad": "Usage: /ptime 14:30",
+        "psaat_ok": "Partner birth time saved: {t}",
+        "pkonum_bad": "Usage: /ploc 41.01 28.98",
+        "pkonum_ok": "Partner location saved: {lat}, {lon}",
+        "ptz_bad": "Usage: /ptimezone Europe/London (IANA timezone)",
+        "ptz_ok": "Partner timezone: {tz}",
+        "psil_ok": "Partner astro data cleared.",
+        "sinastri_need": "Set your /dogum and partner /pbirth first (optionally /ptime /ploc /ptimezone).",
+        "sinastri_empty": "Could not compute synastry (need Swiss Ephemeris or more data).",
+        "sil_ok": "Profile, partner, chat summary, and notes cleared. Language setting kept.",
     },
 }
 

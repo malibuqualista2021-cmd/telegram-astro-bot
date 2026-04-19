@@ -50,6 +50,9 @@ class LlmAstrologyService:
         intent: Intent,
         chat_mode: ChatMode,
         horary_context: str = "",
+        chart_facts: str = "",
+        synastry_facts: str = "",
+        learned_notes: str = "",
     ) -> str:
         base = SYSTEM_PROMPT_EN if lang == "en" else SYSTEM_PROMPT_TR
         parts = [base]
@@ -61,6 +64,15 @@ class LlmAstrologyService:
             parts.append(mh)
         if profile_hint:
             parts.append(profile_hint)
+        cf = (chart_facts or "").strip()
+        if cf:
+            parts.append(cf[:9000])
+        sf = (synastry_facts or "").strip()
+        if sf:
+            parts.append(sf[:7000])
+        ln = (learned_notes or "").strip()
+        if ln:
+            parts.append(ln[:5000])
         hc = (horary_context or "").strip()
         if hc:
             parts.append(hc[:9000])
@@ -173,6 +185,9 @@ class LlmAstrologyService:
         *,
         lang: str = "tr",
         profile_hint: str = "",
+        chart_facts: str = "",
+        synastry_facts: str = "",
+        learned_notes: str = "",
         memory_summary: str = "",
         intent: Intent = "info",
         chat_mode: ChatMode = "default",
@@ -191,6 +206,9 @@ class LlmAstrologyService:
             intent,
             normalize_chat_mode(chat_mode),
             horary_context=horary_context,
+            chart_facts=chart_facts,
+            synastry_facts=synastry_facts,
+            learned_notes=learned_notes,
         )
         is_horary = normalize_chat_mode(chat_mode) == "horary" and bool((horary_context or "").strip())
         suffix = self._user_suffix(lang, horary=is_horary)

@@ -10,14 +10,24 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from astro_bot.handlers import keyboards as kb
 from astro_bot.i18n import Lang, get_lang, t
-from astro_bot.services.chart_service import format_chart_text
+from astro_bot.services.chart_service import build_synastry_context, format_chart_text
 from astro_bot.services.faq_service import FaqService
 from astro_bot.services.profile_service import (
+    clear_all_user_chart_data,
+    clear_partner,
     parse_date_arg,
     parse_lat_lon,
     parse_time_arg,
+    parse_tz_arg,
+    partner_from_user_data,
     profile_from_user_data,
+    save_partner,
     save_profile,
+)
+from astro_bot.services.user_learning import (
+    add_learning_note,
+    clear_learning_notes,
+    list_notes_for_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +108,21 @@ async def profil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
     lines.append(f"• lat/lon: {p.lat:.4f}, {p.lon:.4f}")
     lines.append(f"• tz: {p.tz_name}")
+    pp = partner_from_user_data(context.user_data)
+    if pp.birth_date:
+        lines.append("" if lang == "en" else "")
+        lines.append("<b>Partner</b>" if lang == "en" else "<b>Partner</b>")
+        lines.append(
+            f"• date: {pp.birth_date.isoformat()}" if lang == "en" else f"• tarih: {pp.birth_date.isoformat()}"
+        )
+        if pp.birth_time:
+            lines.append(
+                f"• time: {pp.birth_time.strftime('%H:%M')}"
+                if lang == "en"
+                else f"• saat: {pp.birth_time.strftime('%H:%M')}"
+            )
+        lines.append(f"• lat/lon: {pp.lat:.4f}, {pp.lon:.4f}")
+        lines.append(f"• tz: {pp.tz_name}")
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
@@ -183,6 +208,131 @@ async def burclar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+async def pdogum_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("pdogum_bad", lang))
+        return
+    d = parse_date_arg(" ".join(context.args))
+    if not d:
+        await update.message.reply_text(t("pdogum_bad", lang))
+        return
+    save_partner(context.user_data, birth_date=d.isoformat())
+    await update.message.reply_text(t("pdogum_ok", lang, d=d.isoformat()))
+
+
+async def psaat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("psaat_bad", lang))
+        return
+    tm = parse_time_arg(" ".join(context.args))
+    if not tm:
+        await update.message.reply_text(t("psaat_bad", lang))
+        return
+    save_partner(context.user_data, birth_time=tm.strftime("%H:%M"))
+    await update.message.reply_text(t("psaat_ok", lang, t=tm.strftime("%H:%M")))
+
+
+async def pkonum_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("pkonum_bad", lang))
+        return
+    ll = parse_lat_lon(list(context.args))
+    if not ll:
+        await update.message.reply_text(t("pkonum_bad", lang))
+        return
+    lat, lon = ll
+    save_partner(context.user_data, lat=lat, lon=lon)
+    await update.message.reply_text(t("pkonum_ok", lang, lat=f"{lat:.4f}", lon=f"{lon:.4f}"))
+
+
+async def ptz_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("ptz_bad", lang))
+        return
+    tz = parse_tz_arg(" ".join(context.args))
+    if not tz:
+        await update.message.reply_text(t("ptz_bad", lang))
+        return
+    save_partner(context.user_data, tz=tz)
+    await update.message.reply_text(t("ptz_ok", lang, tz=tz))
+
+
+async def psil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    clear_partner(context.user_data)
+    await update.message.reply_text(t("psil_ok", lang))
+
+
+async def sinastri_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    p = profile_from_user_data(context.user_data)
+    pp = partner_from_user_data(context.user_data)
+    if not p.birth_date or not pp.birth_date:
+        await update.message.reply_text(t("sinastri_need", lang))
+        return
+    text = build_synastry_context(p, pp, lang, max_chars=3900)
+    if not text.strip():
+        await update.message.reply_text(t("sinastri_empty", lang))
+        return
+    await update.message.reply_text(text[:4090])
+
+
+async def sil_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    clear_all_user_chart_data(context.user_data)
+    await update.message.reply_text(t("sil_ok", lang))
+
+
+async def hatirla_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    if not context.args:
+        await update.message.reply_text(t("hatirla_usage", lang))
+        return
+    raw = " ".join(context.args).strip()
+    if add_learning_note(context.user_data, raw):
+        await update.message.reply_text(t("hatirla_ok", lang))
+    else:
+        await update.message.reply_text(t("hatirla_bad", lang))
+
+
+async def notlarim_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    await update.message.reply_text(
+        list_notes_for_user(context.user_data, lang),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def notlar_temizle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    clear_learning_notes(context.user_data)
+    await update.message.reply_text(t("notlar_cleared", lang))
+
+
 async def hakkinda_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -207,3 +357,13 @@ def register_command_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("sss", sss_command))
     application.add_handler(CommandHandler("burclar", burclar_command))
     application.add_handler(CommandHandler("hakkinda", hakkinda_command))
+    application.add_handler(CommandHandler(["hatirla", "remember"], hatirla_command))
+    application.add_handler(CommandHandler(["notlarim", "mynotes"], notlarim_command))
+    application.add_handler(CommandHandler(["notlartemizle", "clearnotes"], notlar_temizle_command))
+    application.add_handler(CommandHandler(["pdogum", "pbirth"], pdogum_command))
+    application.add_handler(CommandHandler(["psaat", "ptime"], psaat_command))
+    application.add_handler(CommandHandler(["pkonum", "ploc"], pkonum_command))
+    application.add_handler(CommandHandler(["ptz", "ptimezone"], ptz_command))
+    application.add_handler(CommandHandler(["psil", "pclearpartner"], psil_command))
+    application.add_handler(CommandHandler(["sinastri", "synastry"], sinastri_command))
+    application.add_handler(CommandHandler(["sil", "delete_my_data"], sil_command))

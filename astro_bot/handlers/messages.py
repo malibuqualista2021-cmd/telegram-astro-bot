@@ -23,8 +23,14 @@ from astro_bot.services.horary_service import format_horary_context, user_has_sa
 from astro_bot.services.intent_service import classify_intent
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.memory_service import should_summarize, split_for_summarize
-from astro_bot.services.profile_service import profile_from_user_data
+from astro_bot.services.profile_service import (
+    partner_from_user_data,
+    partner_to_llm_hint,
+    profile_from_user_data,
+)
 from astro_bot.services.rate_limit import ChatRateLimiter
+from astro_bot.services.chart_service import build_computed_chart_context, build_synastry_context
+from astro_bot.services.user_learning import add_learning_note, format_learning_for_llm
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +83,28 @@ async def _process_free_text(
         logger.info("Konuşma modu güncellendi chat_id=%s mode=%s", chat_id, mode_parsed)
 
     text = text.strip()
+    remember = re.match(
+        r"^(?:hatırla|hatirla|remember)\s*:\s*(.+)$",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if remember:
+        note = (remember.group(1) or "").strip()
+        if add_learning_note(context.user_data, note):
+            await update.message.reply_text(
+                "Not kaydedildi; sonraki yanıtlarda dikkate alınacak."
+                if lang != "en"
+                else "Saved — I’ll take this into account in future replies.",
+            )
+        else:
+            await update.message.reply_text(
+                "Boş not. Örnek: hatırla: Daha samimi yaz."
+                if lang != "en"
+                else "Empty note. Example: remember: keep it warmer.",
+            )
+        logger.info("Kullanıcı notu eklendi chat_id=%s", chat_id)
+        return
+
     if not text:
         if mode_parsed is not None:
             ack = mode_ack_message(
@@ -130,7 +158,20 @@ async def _process_free_text(
 
     history = _trim_history(hist_raw, max_turns)
     profile = profile_from_user_data(context.user_data)
-    hint = profile.to_llm_hint(lang) if profile.birth_date else ""
+    partner_prof = partner_from_user_data(context.user_data)
+    hint_parts: list[str] = []
+    if profile.birth_date:
+        hint_parts.append(profile.to_llm_hint(lang))
+    if partner_prof.birth_date:
+        hint_parts.append(partner_to_llm_hint(partner_prof, lang))
+    hint = "\n\n".join(hint_parts)
+    chart_facts = build_computed_chart_context(profile, lang) if profile.birth_date else ""
+    synastry_facts = (
+        build_synastry_context(profile, partner_prof, lang)
+        if profile.birth_date and partner_prof.birth_date
+        else ""
+    )
+    learned_notes = format_learning_for_llm(context.user_data, lang)
     intent = classify_intent(text, lang)
     mem = (context.user_data.get("memory_summary") or "").strip()
 
@@ -154,6 +195,9 @@ async def _process_free_text(
         history=history,
         lang=lang,
         profile_hint=hint,
+        chart_facts=chart_facts,
+        synastry_facts=synastry_facts,
+        learned_notes=learned_notes,
         memory_summary=mem,
         intent=intent,
         chat_mode=chat_mode,
