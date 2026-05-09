@@ -67,6 +67,11 @@ def setup_logging() -> None:
 
 
 async def post_init(application: Application) -> None:
+    # Webhook açık kaldıysa getUpdates ile çakışabilir; bu bot yalnızca polling kullanır.
+    try:
+        await application.bot.delete_webhook(drop_pending_updates=False)
+    except Exception:
+        logging.getLogger(__name__).warning("delete_webhook başarısız (yoksayılıyor)", exc_info=True)
     me = await application.bot.get_me()
     application.bot_data["bot_username"] = (me.username or "").lower()
     logging.getLogger(__name__).info(
