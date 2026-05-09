@@ -8,12 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from astro_bot.i18n import Lang
-from astro_bot.services.chart_service import (
-    _ascendant_deg,
-    _positions_ephem,
-    _tropical_longitude_ephem,
-    sign_name,
-)
+from astro_bot.services.chart_service import apply_swiss_ephemeris_path, sign_name
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +105,7 @@ def _horary_swisseph(
         return None
 
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
         y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
         ut = (
             dt_utc.hour

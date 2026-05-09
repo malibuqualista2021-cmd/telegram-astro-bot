@@ -10,7 +10,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from astro_bot.handlers import keyboards as kb
 from astro_bot.i18n import Lang, get_lang, t
-from astro_bot.services.chart_service import build_computed_chart_context, build_synastry_context, format_chart_text
+from astro_bot.services.chart_service import (
+    build_computed_chart_context,
+    build_synastry_context,
+    format_chart_text,
+    format_ephemeris_engine_status,
+)
 from astro_bot.services.claim_guard import maybe_append_data_footnote
 from astro_bot.services.faq_service import FaqService
 from astro_bot.services.expert_style import AstroStyle, astro_style_instruction, get_astro_style
@@ -206,6 +211,14 @@ async def harita_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     text = format_chart_text(p, lang)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+async def hesapdurumu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    lang = get_lang(context.user_data.get("lang"))
+    text = format_ephemeris_engine_status(lang)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 async def finans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -500,6 +513,7 @@ def register_command_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("saat", saat_command))
     application.add_handler(CommandHandler("konum", konum_command))
     application.add_handler(CommandHandler("harita", harita_command))
+    application.add_handler(CommandHandler(["hesapdurumu", "ephemeris"], hesapdurumu_command))
     application.add_handler(CommandHandler(["finans", "finance"], finans_command))
     application.add_handler(CommandHandler("sss", sss_command))
     application.add_handler(CommandHandler("burclar", burclar_command))

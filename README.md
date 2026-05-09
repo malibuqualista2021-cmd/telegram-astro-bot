@@ -6,7 +6,7 @@
 
 - **Komutlar:** `/start`, `/help`, `/menu`, `/lang`, `/profil`, `/dogum`, `/saat`, `/konum`, `/harita`, `/sss`, `/burclar`, `/hakkinda`
 - **Kişisel profil:** doğum tarihi/saati ve konum (enlem/boylam); LLM yanıtlarına yumuşak bağlam olarak eklenir
-- **Eğitim amaçlı harita özeti:** Mümkünse **Swiss Ephemeris** (`pyswisseph`), yoksa `ephem` ile Güneş/Ay/Yükselen (yaklaşık; `/harita`)
+- **Eğitim amaçlı harita özeti:** **Swiss Ephemeris** (`pyswisseph`). **.se1** ephemeris dosyaları yoksa hesaplar Astro.com vb. ile uyuşmayabilir → ortam değişkeni `SWISS_EPHE_PATH` ve Telegram’da **`/hesapdurumu`** (veya `/ephemeris`) ile sunucuda test. Veri dosyaları (telifli yorum değil): [astro.com Swiss Ephemeris FTP](https://www.astro.com/ftp/swisseph/ephe/). Yedek motor: `ephem` (yaklaşık)
 - **Niyet:** bilgi / günlük-fal tarzı / şaka — yanıt tonu için ipuçları
 - **Özet hafıza:** uzun sohbette eski kısım LLM ile özetlenir (`MEMORY_SUMMARIZE_AT_MSGS`)
 - **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
@@ -54,11 +54,23 @@ git push -u origin main
    - `TELEGRAM_BOT_TOKEN` (zorunlu)
    - LLM anahtarı (**en az biri**): `GROQ_API_KEY` (ücretsiz katman: [Groq](https://console.groq.com/keys)), veya `OPENAI_API_KEY`, veya `GEMINI_API_KEY` / `GOOGLE_API_KEY`
    - **Kalıcılık için önerilir:** Railway **PostgreSQL** ekle → `DATABASE_URL` otomatik gelir (profil/sohbet diskte kalır; yalnızca SQLite + geçici disk kullanırsan redeploy’da silinebilir)
+   - **Harita doğruluğu:** `.se1` dosyalarını bir volume veya build aşamasında imaj içine koyup `SWISS_EPHE_PATH` ver (yoksa Swiss hesapları zayıf kalır; bkz. yukarıdaki “Swiss Ephemeris” bölümü)
    - İsteğe bağlı: `LLM_PROVIDER`, `LLM_MODEL`, `SENTRY_DSN`, `LOG_LEVEL`, vb. (`.env.example`)
 3. Deploy ayarında başlangıç komutu repodaki `railway.toml` ile **`python -m astro_bot`** olarak ayarlanır; farklı bir şey yazma.
 4. Deploy tamamlanınca loglarda `Polling başlatılıyor` benzeri satırları görmelisin; Telegram’da bota yazarak dene.
 
 **Not:** Railway arayüzünde servis türü “web” gibi HTTP bekleyen bir şablon seçtiysen ve deploy takılıyorsa, bu proje **HTTP sunucusu açmaz**; uzun süre çalışan **tek süreç** (worker) olarak düşün. Gerekirse Railway dokümantasyonundan “custom start command / background worker” benzeri kuruluma bak.
+
+## Swiss Ephemeris — doğru konumlar için (önemli)
+
+Bot, ticari sitelerin çoğuyla aynı sınıfta motor olan **Swiss Ephemeris** kullanır; ancak sunucuda **`pyswisseph` tek başına yetmez** — **ikili ephemeris dosyaları** (`.se1`) gerekir. Bunlar Astro.com’un **resmi FTP** alanında **halka açık veri** olarak durur (sayfa yorumu değil, gökyüzü çizelgesi):
+
+1. Örn. klasör: `C:\sweph\ephe` (Linux’ta `/opt/sweph/ephe`).
+2. [https://www.astro.com/ftp/swisseph/ephe/](https://www.astro.com/ftp/swisseph/ephe/) adresinden en az **gezegen + Ay** dosyalarını indir (ör. `sepl_18.se1`, `semo_18.se1` — ihtiyaca göre paket açıklamasına bak).
+3. `.env` veya sunucu ortamına ekle: `SWISS_EPHE_PATH=C:\sweph\ephe` (kendi yolun).
+4. Botu yeniden başlat. Telegram’da **`/hesapdurumu`** ile test: Güneş 2000-01-01 değeri ~279–281° civarında olmalı.
+
+Yanlış veya eksik `.se1` → yanlış boylamlar veya `ephem` yedeğine düşme; kullanıcı “site doğru, bot yanlış” sanır. Konum/tarih için ayrıca **`/konum`**, **`tzdata`** ve doğru **IANA** saat dilimi gerekir.
 
 ## Kurulum (yerel)
 

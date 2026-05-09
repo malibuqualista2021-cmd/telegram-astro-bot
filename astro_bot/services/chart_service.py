@@ -4,14 +4,106 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from astro_bot.i18n import Lang
 from astro_bot.services.profile_service import UserProfile, observer_datetime, uses_default_coordinates
 
 logger = logging.getLogger(__name__)
+
+_swiss_ephe_initialized = False
+_last_swiss_ephe_path: str = ""
+
+
+def apply_swiss_ephemeris_path() -> str:
+    """Swiss Ephemeris .se1 dosya klasörünü ayarlar. SWISS_EPHE_PATH boşsa kütüphane varsayılan arar (çoğu kurulumda yetersiz)."""
+    global _swiss_ephe_initialized, _last_swiss_ephe_path
+    import swisseph as swe
+
+    if _swiss_ephe_initialized:
+        return _last_swiss_ephe_path
+
+    raw = os.environ.get("SWISS_EPHE_PATH", "").strip()
+    path = ""
+    if raw:
+        p = Path(raw).expanduser()
+        if p.is_dir():
+            path = str(p.resolve())
+        else:
+            logger.warning("SWISS_EPHE_PATH geçersiz veya klasör değil: %s", raw)
+    swe.set_ephe_path(path)
+    _swiss_ephe_initialized = True
+    _last_swiss_ephe_path = path
+    logger.info("Swiss Ephemeris set_ephe_path(%r)", path or "")
+    return path
+
+
+def format_ephemeris_engine_status(lang: Lang) -> str:
+    """Sunucuda Swiss kurulumu ve hızlı doğruluk testi (Telegram HTML)."""
+    try:
+        import swisseph as swe
+    except ImportError:
+        return (
+            "<b>Swiss Ephemeris</b>\n<code>pyswisseph</code> yüklü değil. <code>pip install pyswisseph</code>"
+            if lang != "en"
+            else "<b>Swiss Ephemeris</b>\n<code>pyswisseph</code> not installed. Run <code>pip install pyswisseph</code>"
+        )
+
+    applied = apply_swiss_ephemeris_path()
+
+    if lang == "en":
+        lines: list[str] = [
+            "<b>Ephemeris engine</b>",
+            f"Data path <code>SWISS_EPHE_PATH</code>: "
+            f"<code>{applied or '(empty — may fail or use bundled search)'}</code>",
+        ]
+    else:
+        lines = [
+            "<b>Ephemeris motoru</b>",
+            f"<code>SWISS_EPHE_PATH</code> veri klasörü: "
+            f"<code>{applied or '(boş — dosya yoksa hesaplar hatalı/eksik olabilir)'}</code>",
+        ]
+
+    try:
+        jd = swe.julday(2000, 1, 1, 12.0, swe.GREG_CAL)
+        xx, rc = swe.calc_ut(jd, swe.SUN, swe.FLG_SWIEPH)
+        sun_deg = float(xx[0]) % 360.0
+        if rc < 0:
+            raise RuntimeError(f"swe.calc_ut rc={rc}")
+        if lang == "en":
+            lines.append(
+                f"Self-test: Sun 2000-01-01 12:00 UTC ≈ <b>{sun_deg:.2f}°</b> tropical "
+                f"(expect ~279–281° — if far off, add .se1 files to path)."
+            )
+        else:
+            lines.append(
+                f"Kendi kendine test: Güneş 2000-01-01 12:00 UTC ≈ <b>{sun_deg:.2f}°</b> tropikal "
+                f"(~279–281° beklenir — çok sapıyorsa klasöre .se1 dosyalarını ekleyin)."
+            )
+    except Exception as e:
+        if lang == "en":
+            lines.append(f"Self-test <b>failed</b>: {e}")
+        else:
+            lines.append(f"Test <b>başarısız</b>: {e}")
+
+    if lang == "en":
+        lines.append(
+            "Download <b>binary ephemeris only</b> (not interpretations): "
+            "<a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com Swiss Ephemeris FTP</a> "
+            "(e.g. <code>sepl_18.se1</code>, <code>semo_18.se1</code>). Set env <code>SWISS_EPHE_PATH</code> to that folder."
+        )
+    else:
+        lines.append(
+            "Yorum metni değil, yalnızca <b>sayısal efemeris</b> dosyaları: "
+            "<a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com Swiss Ephemeris FTP</a> "
+            "(ör. <code>sepl_18.se1</code>, <code>semo_18.se1</code>). İndirdikten sonra klasörü <code>SWISS_EPHE_PATH</code> ile ver."
+        )
+    return "\n".join(lines)
+
 
 OBLIQUITY_DEG = 23.4392911
 HOUSE_LABEL = {
@@ -241,7 +333,7 @@ def _compute_swisseph_natal(
         return None
 
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
         y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
         ut = (
             dt_utc.hour
@@ -316,7 +408,7 @@ def _transit_hits(
     except ImportError:
         return None
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
         y, m, d = dt_transit_utc.year, dt_transit_utc.month, dt_transit_utc.day
         ut = (
             dt_transit_utc.hour
@@ -428,7 +520,7 @@ def _progression_body_lines(
     except ImportError:
         return []
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
         y, m, d = prog.year, prog.month, prog.day
         ut = prog.hour + prog.minute / 60.0 + prog.second / 3600.0 + prog.microsecond / 3.6e9
         jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
@@ -458,7 +550,7 @@ def _julday_from_utc(dt_utc: datetime) -> float | None:
     except ImportError:
         return None
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
         y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
         ut = (
             dt_utc.hour
@@ -508,7 +600,7 @@ def _fixed_star_conjunction_lines(
     except ImportError:
         return []
     try:
-        swe.set_ephe_path("")
+        apply_swiss_ephemeris_path()
     except Exception:
         return []
 
