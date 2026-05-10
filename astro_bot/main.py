@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 
 from telegram import Update
-from telegram.ext import Application
+from telegram.error import Conflict
+from telegram.ext import Application, ContextTypes
 
 from astro_bot import __version__, settings
 from astro_bot.config import (
@@ -67,11 +70,25 @@ def setup_logging() -> None:
 
 
 async def post_init(application: Application) -> None:
-    # Webhook açık kaldıysa getUpdates ile çakışabilir; bu bot yalnızca polling kullanır.
+    log = logging.getLogger(__name__)
+    # Webhook açık kaldıysa getUpdates ile çakışır; sadece polling kullanıyoruz.
     try:
-        await application.bot.delete_webhook(drop_pending_updates=False)
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        log.info("Webhook silindi (drop_pending_updates=True).")
     except Exception:
-        logging.getLogger(__name__).warning("delete_webhook başarısız (yoksayılıyor)", exc_info=True)
+        log.warning("delete_webhook başarısız (yoksayılıyor)", exc_info=True)
+
+    # Eski long-polling oturumu Telegram tarafında ~50 sn açık kalabilir.
+    # Bekleme süresi: STARTUP_GETUPDATES_DRAIN_SECONDS (varsayılan 0; sorun varsa 55 yap).
+    drain = 0
+    try:
+        drain = int(os.getenv("STARTUP_GETUPDATES_DRAIN_SECONDS", "0").strip() or "0")
+    except ValueError:
+        drain = 0
+    if drain > 0:
+        log.info("Önceki polling oturumunun düşmesi için %d sn bekleniyor…", drain)
+        await asyncio.sleep(drain)
+
     me = await application.bot.get_me()
     application.bot_data["bot_username"] = (me.username or "").lower()
     logging.getLogger(__name__).info(
@@ -156,5 +173,35 @@ def main() -> None:
     register_callback_handlers(application)
     register_message_handlers(application)
 
+    async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        err = context.error
+        if isinstance(err, Conflict):
+            log.error(
+                "Telegram Conflict: aynı tokenla başka bir polling oturumu var. "
+                "60 sn bekleyip süreçten çıkıyorum; restart policy temiz başlatacak."
+            )
+            await asyncio.sleep(60)
+            try:
+                await application.stop()
+            except Exception:
+                pass
+            os._exit(1)
+        else:
+            log.exception("İşlenmeyen hata", exc_info=err)
+
+    application.add_error_handler(_on_error)
+
     log.info("Polling başlatılıyor…")
-    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    try:
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False,
+        )
+    except Conflict:
+        log.error(
+            "Polling sırasında Conflict (eski getUpdates oturumu hâlâ kayıtlı). "
+            "60 sn bekliyorum, ardından çıkış. Restart policy yeniden başlatacak."
+        )
+        time.sleep(60)
+        sys.exit(1)
