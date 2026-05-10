@@ -21,7 +21,7 @@ from astro_bot.services.conversation_mode import (
 )
 from astro_bot.services.faq_service import FaqService
 from astro_bot.services.horary_service import format_horary_context, user_has_saved_coordinates
-from astro_bot.services.intent_service import classify_intent
+from astro_bot.services.intent_service import classify_intent, is_personal_chart_question
 from astro_bot.services.llm_service import LlmAstrologyService
 from astro_bot.services.memory_service import should_summarize, split_for_summarize
 from astro_bot.services.profile_service import (
@@ -161,7 +161,12 @@ async def _process_free_text(
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     intent = classify_intent(text, lang)
-    skip_faq = message_requests_horary(text, lang) or intent == "finance"
+    personal_q = is_personal_chart_question(text, lang)
+    skip_faq = (
+        message_requests_horary(text, lang)
+        or intent == "finance"
+        or personal_q
+    )
     faq_ans = None if skip_faq else faq.find_answer(text, lang)
     if faq_ans:
         await update.message.reply_text(faq_ans)
@@ -200,6 +205,37 @@ async def _process_free_text(
     learned_notes = format_learning_for_llm(context.user_data, lang)
     mem = (context.user_data.get("memory_summary") or "").strip()
 
+    # Şahsi soru: profil yoksa kullanıcıya direkt yönlendirme yap; LLM'e harcama yapma.
+    if personal_q and not profile.birth_date:
+        ask = (
+            "Bunun için doğum verin lazım. Şu üç komutu sırayla yaz:\n"
+            "/dogum 1990-05-15\n/saat 14:30\n/konum 41.01 28.98 (kendi şehrin enlem/boylam)\n\n"
+            "Saat yoksa yine yorum yaparım ama yükselen ve evler kesinleşmez."
+            if lang != "en"
+            else (
+                "I need your birth data. Send these three commands:\n"
+                "/dogum 1990-05-15\n/saat 14:30\n/konum 41.01 28.98 (your city's lat lon)\n\n"
+                "Without birth time I can still interpret, but Asc/houses won't be exact."
+            )
+        )
+        await update.message.reply_text(ask)
+        logger.info("Yanıt=profil_iste chat_id=%s", chat_id)
+        return
+
+    # Şahsi soru + saat eksik: hatırlat ama yine cevap üret
+    personal_hint = ""
+    if personal_q and profile.birth_date and profile.birth_time is None:
+        personal_hint = (
+            "NOT: Kullanıcı kişisel haritası hakkında soru soruyor ama doğum saati kayıtlı değil. "
+            "Yükselen ve ev iddialarında kesinlik yok; /saat ile ekleyebileceğini kısaca hatırlat ve "
+            "elinde olanla (Güneş, gezegen burçları) en iyi yorumu yap."
+            if lang != "en"
+            else (
+                "NOTE: User is asking about their personal chart but birth time is missing. "
+                "Asc/houses are uncertain; gently note /saat can fix it, then answer with what you have."
+            )
+        )
+
     rag_svc = context.bot_data.get("knowledge_rag")
     rag_text = ""
     if rag_svc is not None:
@@ -224,6 +260,9 @@ async def _process_free_text(
             lang,
             used_custom_location=user_has_saved_coordinates(context.user_data),
         )
+
+    if personal_hint:
+        hint = (hint + "\n\n" + personal_hint).strip() if hint else personal_hint
 
     reply = await llm_svc.reply(
         text,

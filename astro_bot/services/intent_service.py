@@ -45,6 +45,39 @@ def _looks_like_astro_question(t: str, lang: str) -> bool:
     )
 
 
+def is_personal_chart_question(text: str, lang: str) -> bool:
+    """'Yükselenim ne?', 'Ay burcum?', 'Haritam ne diyor?' gibi şahsi sorular.
+
+    Bu sorular SSS'e değil; doğrudan LLM + COMPUTED_ASTRO_DATA'ya gitmeli.
+    """
+    t = (text or "").lower()
+    if not t.strip():
+        return False
+    if lang == "en":
+        return bool(
+            re.search(
+                r"\b(my\s+(ascendant|rising|asc|moon\s+sign|sun\s+sign|chart|natal|placement|placements|houses?|aspects?|venus|mars|mercury|jupiter|saturn|moon|sun))\b|"
+                r"\bwhat'?s\s+my\s+(asc|rising|ascendant|moon|sun|chart)\b|"
+                r"\bbased\s+on\s+my\s+chart\b",
+                t,
+                re.I,
+            )
+        )
+    return bool(
+        re.search(
+            r"(yükselenim|yukselenim|yükselenin|yukselenin|"
+            r"ay\s+burcum|ay\s+burcun|"
+            r"güneşim|gunesim|güneş\s+burcum|gunes\s+burcum|"
+            r"haritam(?:da|ı|ı\s|ın|ında)?|haritami|haritamda|haritamın|"
+            r"natal\s+haritam|doğum\s+haritam|dogum\s+haritam|"
+            r"venüsüm|venusum|marsım|marsim|merküm|merkurum|jüpiterim|jupiterim|satürnüm|saturnum|"
+            r"benim\s+(yükselenim|yukselenim|ay\s+burcum|güneşim|gunesim|haritam))",
+            t,
+            re.I,
+        )
+    )
+
+
 def classify_intent(text: str, lang: str) -> Intent:
     t = text.lower().strip()
     if not t:
