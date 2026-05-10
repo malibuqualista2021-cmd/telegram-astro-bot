@@ -8,7 +8,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from astro_bot.i18n import Lang
-from astro_bot.services.chart_service import apply_swiss_ephemeris_path, sign_name
+from astro_bot.services.chart_service import (
+    _ephe_flags,
+    apply_swiss_ephemeris_path,
+    ephemeris_engine_name,
+    sign_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +110,8 @@ def _horary_swisseph(
         return None
 
     try:
-        apply_swiss_ephemeris_path()
+        flg = _ephe_flags()
+        engine = ephemeris_engine_name()
         y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
         ut = (
             dt_utc.hour
@@ -114,7 +120,6 @@ def _horary_swisseph(
             + dt_utc.microsecond / 3.6e9
         )
         jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
-        flg = swe.FLG_SWIEPH | swe.FLG_SPEED
         pairs = [
             ("Sun", swe.SUN),
             ("Moon", swe.MOON),
@@ -132,7 +137,7 @@ def _horary_swisseph(
         asc = float(ascmc[0]) % 360
         mc = float(ascmc[1]) % 360
         c12 = [float(cusps[i]) for i in range(1, 13)]
-        return lons, asc, mc, "Swiss Ephemeris (Placidus)", c12
+        return lons, asc, mc, f"{engine} + Placidus", c12
     except Exception:
         logger.exception("Horary Swiss hesap hatası")
         return None

@@ -17,11 +17,17 @@ logger = logging.getLogger(__name__)
 
 _swiss_ephe_initialized = False
 _last_swiss_ephe_path: str = ""
+_use_moshier_fallback: bool = False
 
 
 def apply_swiss_ephemeris_path() -> str:
-    """Swiss Ephemeris .se1 dosya klasörünü ayarlar. SWISS_EPHE_PATH boşsa kütüphane varsayılan arar (çoğu kurulumda yetersiz)."""
-    global _swiss_ephe_initialized, _last_swiss_ephe_path
+    """Swiss Ephemeris .se1 dosya klasörünü ayarlar.
+
+    SWISS_EPHE_PATH boşsa veya .se1 dosyası yoksa otomatik **Moshier** yerleşik
+    ephemeris’ine geçilir (dosya gerektirmez, ~1° altı doğruluk; doğum
+    haritası için astro.com ile pratikte örtüşür).
+    """
+    global _swiss_ephe_initialized, _last_swiss_ephe_path, _use_moshier_fallback
     import swisseph as swe
 
     if _swiss_ephe_initialized:
@@ -35,11 +41,38 @@ def apply_swiss_ephemeris_path() -> str:
             path = str(p.resolve())
         else:
             logger.warning("SWISS_EPHE_PATH geçersiz veya klasör değil: %s", raw)
+
     swe.set_ephe_path(path)
+
+    has_se1 = False
+    if path:
+        try:
+            has_se1 = any(Path(path).glob("*.se1"))
+        except Exception:
+            has_se1 = False
+    _use_moshier_fallback = not has_se1
+
     _swiss_ephe_initialized = True
     _last_swiss_ephe_path = path
-    logger.info("Swiss Ephemeris set_ephe_path(%r)", path or "")
+    logger.info(
+        "Swiss Ephemeris set_ephe_path(%r); engine=%s",
+        path or "",
+        "Moshier (built-in)" if _use_moshier_fallback else "Swiss .se1",
+    )
     return path
+
+
+def _ephe_flags() -> int:
+    import swisseph as swe
+
+    apply_swiss_ephemeris_path()
+    base = swe.FLG_MOSEPH if _use_moshier_fallback else swe.FLG_SWIEPH
+    return base | swe.FLG_SPEED
+
+
+def ephemeris_engine_name() -> str:
+    apply_swiss_ephemeris_path()
+    return "Moshier (built-in, no .se1)" if _use_moshier_fallback else "Swiss Ephemeris (.se1)"
 
 
 def format_ephemeris_engine_status(lang: Lang) -> str:
@@ -54,35 +87,36 @@ def format_ephemeris_engine_status(lang: Lang) -> str:
         )
 
     applied = apply_swiss_ephemeris_path()
+    engine = ephemeris_engine_name()
 
     if lang == "en":
         lines: list[str] = [
             "<b>Ephemeris engine</b>",
-            f"Data path <code>SWISS_EPHE_PATH</code>: "
-            f"<code>{applied or '(empty — may fail or use bundled search)'}</code>",
+            f"Mode: <b>{engine}</b>",
+            f"Data path <code>SWISS_EPHE_PATH</code>: <code>{applied or '(empty)'}</code>",
         ]
     else:
         lines = [
             "<b>Ephemeris motoru</b>",
-            f"<code>SWISS_EPHE_PATH</code> veri klasörü: "
-            f"<code>{applied or '(boş — dosya yoksa hesaplar hatalı/eksik olabilir)'}</code>",
+            f"Mod: <b>{engine}</b>",
+            f"<code>SWISS_EPHE_PATH</code> veri klasörü: <code>{applied or '(boş)'}</code>",
         ]
 
     try:
         jd = swe.julday(2000, 1, 1, 12.0, swe.GREG_CAL)
-        xx, rc = swe.calc_ut(jd, swe.SUN, swe.FLG_SWIEPH)
+        xx, rc = swe.calc_ut(jd, swe.SUN, _ephe_flags())
         sun_deg = float(xx[0]) % 360.0
         if rc < 0:
             raise RuntimeError(f"swe.calc_ut rc={rc}")
         if lang == "en":
             lines.append(
                 f"Self-test: Sun 2000-01-01 12:00 UTC ≈ <b>{sun_deg:.2f}°</b> tropical "
-                f"(expect ~279–281° — if far off, add .se1 files to path)."
+                "(expect ~279.86°)."
             )
         else:
             lines.append(
                 f"Kendi kendine test: Güneş 2000-01-01 12:00 UTC ≈ <b>{sun_deg:.2f}°</b> tropikal "
-                f"(~279–281° beklenir — çok sapıyorsa klasöre .se1 dosyalarını ekleyin)."
+                "(beklenen ~279.86°)."
             )
     except Exception as e:
         if lang == "en":
@@ -90,18 +124,22 @@ def format_ephemeris_engine_status(lang: Lang) -> str:
         else:
             lines.append(f"Test <b>başarısız</b>: {e}")
 
-    if lang == "en":
-        lines.append(
-            "Download <b>binary ephemeris only</b> (not interpretations): "
-            "<a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com Swiss Ephemeris FTP</a> "
-            "(e.g. <code>sepl_18.se1</code>, <code>semo_18.se1</code>). Set env <code>SWISS_EPHE_PATH</code> to that folder."
-        )
-    else:
-        lines.append(
-            "Yorum metni değil, yalnızca <b>sayısal efemeris</b> dosyaları: "
-            "<a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com Swiss Ephemeris FTP</a> "
-            "(ör. <code>sepl_18.se1</code>, <code>semo_18.se1</code>). İndirdikten sonra klasörü <code>SWISS_EPHE_PATH</code> ile ver."
-        )
+    if _use_moshier_fallback:
+        if lang == "en":
+            lines.append(
+                "Note: running on the built-in <b>Moshier</b> ephemeris (no <code>.se1</code> files needed). "
+                "Accuracy is ~1 arc-min for natal charts and matches astro.com closely. "
+                "For full Swiss accuracy, drop <code>.se1</code> files into <code>SWISS_EPHE_PATH</code> "
+                "from <a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com FTP</a>."
+            )
+        else:
+            lines.append(
+                "Not: yerleşik <b>Moshier</b> efemerisi kullanılıyor (<code>.se1</code> dosyası gerektirmez). "
+                "Doğum haritası için ~1 ark-dk doğruluk; astro.com ile pratikte örtüşür. "
+                "Tam Swiss doğruluğu için <code>.se1</code> dosyalarını "
+                "<a href=\"https://www.astro.com/ftp/swisseph/ephe/\">astro.com FTP</a>’den indirip "
+                "<code>SWISS_EPHE_PATH</code> klasörüne koyun."
+            )
     return "\n".join(lines)
 
 
@@ -333,7 +371,8 @@ def _compute_swisseph_natal(
         return None
 
     try:
-        apply_swiss_ephemeris_path()
+        flg = _ephe_flags()
+        engine = ephemeris_engine_name()
         y, m, d = dt_utc.year, dt_utc.month, dt_utc.day
         ut = (
             dt_utc.hour
@@ -342,7 +381,6 @@ def _compute_swisseph_natal(
             + dt_utc.microsecond / 3.6e9
         )
         jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
-        flg = swe.FLG_SWIEPH | swe.FLG_SPEED
 
         planets: list[PlanetPoint] = []
         for pid, key in _swisseph_body_list():
@@ -361,7 +399,7 @@ def _compute_swisseph_natal(
                     )
                 )
             except Exception:
-                logger.warning("Swiss Ephemeris: %s atlandı", key, exc_info=False)
+                logger.warning("Ephemeris hesaplama atlandı: %s", key, exc_info=False)
 
         cusps12: list[float] | None = None
         asc_lon = mc_lon = None
@@ -373,9 +411,9 @@ def _compute_swisseph_natal(
             for p in planets:
                 p.house = _house_for_longitude(p.lon, cusps12)
 
-        return planets, cusps12, asc_lon, mc_lon, "Swiss Ephemeris"
+        return planets, cusps12, asc_lon, mc_lon, engine
     except Exception:
-        logger.exception("Swiss Ephemeris natal hesap hatası")
+        logger.exception("Ephemeris natal hesap hatası")
         return None
 
 
@@ -417,7 +455,7 @@ def _transit_hits(
             + dt_transit_utc.microsecond / 3.6e9
         )
         jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
-        flg = swe.FLG_SWIEPH | swe.FLG_SPEED
+        flg = _ephe_flags()
         natal_by_key = {p.key: p for p in natal}
         hits: list[tuple[str, str, int, str, float]] = []
         for pid, tkey in _swisseph_body_list():
@@ -524,7 +562,7 @@ def _progression_body_lines(
         y, m, d = prog.year, prog.month, prog.day
         ut = prog.hour + prog.minute / 60.0 + prog.second / 3600.0 + prog.microsecond / 3.6e9
         jd = swe.julday(y, m, d, ut, swe.GREG_CAL)
-        flg = swe.FLG_SWIEPH | swe.FLG_SPEED
+        flg = _ephe_flags()
         lines: list[str] = []
         for pid, key in ((swe.SUN, "Sun"), (swe.MOON, "Moon")):
             xx, _ = swe.calc_ut(jd, pid, flg)
@@ -615,6 +653,9 @@ def _fixed_star_conjunction_lines(
         points.append(("MC", mc_lon))
 
     hits: list[str] = []
+    if _use_moshier_fallback:
+        # Sabit yıldızlar sefstars.txt + Swiss .se1 gerektirir; Moshier modunda atlanır.
+        return []
     flg = swe.FLG_SWIEPH
     for star in stars:
         slon: float | None = None
