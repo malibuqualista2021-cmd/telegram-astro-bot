@@ -71,7 +71,30 @@ def setup_logging() -> None:
 
 async def post_init(application: Application) -> None:
     log = logging.getLogger(__name__)
+    # Tanılama: hangi botla bağlandık?
+    try:
+        me = await application.bot.get_me()
+        log.info(
+            "Bağlandığım bot: id=%s username=@%s name=%r",
+            me.id,
+            (me.username or "").lower(),
+            me.first_name,
+        )
+        application.bot_data["bot_username"] = (me.username or "").lower()
+    except Exception:
+        log.exception("get_me başarısız")
+
     # Webhook açık kaldıysa getUpdates ile çakışır; sadece polling kullanıyoruz.
+    try:
+        info = await application.bot.get_webhook_info()
+        log.info(
+            "Webhook durumu: url=%r pending=%s last_error=%r",
+            info.url,
+            info.pending_update_count,
+            info.last_error_message,
+        )
+    except Exception:
+        log.warning("get_webhook_info başarısız", exc_info=True)
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
         log.info("Webhook silindi (drop_pending_updates=True).")
@@ -79,22 +102,15 @@ async def post_init(application: Application) -> None:
         log.warning("delete_webhook başarısız (yoksayılıyor)", exc_info=True)
 
     # Eski long-polling oturumu Telegram tarafında ~50 sn açık kalabilir.
-    # Bekleme süresi: STARTUP_GETUPDATES_DRAIN_SECONDS (varsayılan 0; sorun varsa 55 yap).
-    drain = 0
+    # Varsayılan 8 sn drain (Railway redeploy için) — env ile değiştirilebilir.
+    drain = 8
     try:
-        drain = int(os.getenv("STARTUP_GETUPDATES_DRAIN_SECONDS", "0").strip() or "0")
+        drain = int(os.getenv("STARTUP_GETUPDATES_DRAIN_SECONDS", "8").strip() or "8")
     except ValueError:
-        drain = 0
+        drain = 8
     if drain > 0:
         log.info("Önceki polling oturumunun düşmesi için %d sn bekleniyor…", drain)
         await asyncio.sleep(drain)
-
-    me = await application.bot.get_me()
-    application.bot_data["bot_username"] = (me.username or "").lower()
-    logging.getLogger(__name__).info(
-        "Bot kullanıcı adı: @%s",
-        application.bot_data["bot_username"] or "?",
-    )
 
 
 def init_sentry() -> None:
@@ -176,32 +192,41 @@ def main() -> None:
     async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         err = context.error
         if isinstance(err, Conflict):
-            log.error(
-                "Telegram Conflict: aynı tokenla başka bir polling oturumu var. "
-                "60 sn bekleyip süreçten çıkıyorum; restart policy temiz başlatacak."
-            )
-            await asyncio.sleep(60)
-            try:
-                await application.stop()
-            except Exception:
-                pass
-            os._exit(1)
+            # Polling içinde gelirse run_polling zaten düşecek; aşağıdaki halka tekrar dener.
+            log.warning("Conflict (handler): aynı tokenla rakip getUpdates oturumu var.")
         else:
             log.exception("İşlenmeyen hata", exc_info=err)
 
     application.add_error_handler(_on_error)
 
-    log.info("Polling başlatılıyor…")
-    try:
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False,
-        )
-    except Conflict:
-        log.error(
-            "Polling sırasında Conflict (eski getUpdates oturumu hâlâ kayıtlı). "
-            "60 sn bekliyorum, ardından çıkış. Restart policy yeniden başlatacak."
-        )
-        time.sleep(60)
-        sys.exit(1)
+    # Süreç içinde Conflict'e dayanıklı polling halkası: süreçten çıkmıyoruz, restart döngüsü tetiklemiyoruz.
+    # Telegram getUpdates timeout'u ~50 sn; 75 sn beklersek karşı oturum süresi dolar ve biz kazanırız.
+    backoff_sec = 75
+    max_attempts = 0  # 0 = sınırsız
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            log.info("Polling başlatılıyor… (deneme %d)", attempt)
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                close_loop=False,
+            )
+            break  # temiz çıkış (SIGTERM vb.)
+        except Conflict:
+            log.error(
+                "Polling sırasında Conflict. %d sn bekleyip aynı süreçte yeniden deneyeceğim "
+                "(restart döngüsü oluşturmuyoruz).",
+                backoff_sec,
+            )
+            time.sleep(backoff_sec)
+            if max_attempts and attempt >= max_attempts:
+                log.error("Maksimum deneme aşıldı; çıkıyorum.")
+                sys.exit(1)
+        except KeyboardInterrupt:
+            log.info("KeyboardInterrupt; kapatılıyor.")
+            break
+        except Exception:
+            log.exception("Polling beklenmeyen hata; 30 sn sonra yeniden denenecek.")
+            time.sleep(30)
