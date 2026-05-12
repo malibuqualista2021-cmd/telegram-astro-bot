@@ -17,6 +17,8 @@ function defaultSession() {
     lastIntent: null,
     lastReplyMode: null,
     lastHoraryChartData: null,
+    /** Son kullanıcı / asistan mesajları (Groq bağlamı) */
+    conversationHistory: [],
     birthDateText: null,
     birthYmd: null,
     placeText: null,
@@ -70,6 +72,7 @@ function prepareForNextChat(userId, chartData) {
   base.step = 'await_intent';
   base.lastChartData = snapshot;
   base.lastHoraryChartData = prev.lastHoraryChartData;
+  base.conversationHistory = Array.isArray(prev.conversationHistory) ? prev.conversationHistory : [];
   sessions.set(String(userId), base);
 }
 

@@ -8,7 +8,7 @@ const sessionStore = require('./services/sessionStore');
 const userProfileStore = require('./services/userProfileStore');
 const chartCalculator = require('./services/chartCalculator');
 const interpretationService = require('./services/interpretationService');
-const messageClassifier = require('./services/messageClassifier');
+const { sanitizeAiOutputOrThrow } = require('./services/sanitizeTurkishText');
 const astroKnowledgeService = require('./services/astroKnowledgeService');
 const horaryService = require('./services/horaryService');
 const horaryRules = require('./services/horaryRules');
@@ -117,13 +117,25 @@ function stripInterpretationFromChart(chartData) {
   return c;
 }
 
+function mergeConversationHistory(cur, userText, assistantText) {
+  const hist = Array.isArray(cur.conversationHistory) ? [...cur.conversationHistory] : [];
+  const u = String(userText || '').trim().slice(0, 3000);
+  const a = String(assistantText || '').trim().slice(0, 12000);
+  if (u) hist.push({ role: 'user', text: u });
+  if (a) hist.push({ role: 'assistant', text: a });
+  while (hist.length > 20) hist.splice(0, hist.length - 20);
+  return hist;
+}
+
 function afterConversationReply(uid, userText, assistantText, meta = {}) {
   const cur = sessionStore.get(uid);
+  const hist = mergeConversationHistory(cur, userText, assistantText);
   const patch = {
     lastUserMessage: String(userText || '').slice(0, 4000),
     lastAssistantAnswer: String(assistantText || '').slice(0, 12000),
     lastIntent: meta.intent != null ? String(meta.intent).slice(0, 120) : cur.lastIntent,
     lastReplyMode: meta.replyMode != null ? String(meta.replyMode).slice(0, 80) : cur.lastReplyMode,
+    conversationHistory: hist,
   };
   if (meta.lastChartData !== undefined) patch.lastChartData = meta.lastChartData;
   if (meta.lastHoraryChartData !== undefined) patch.lastHoraryChartData = meta.lastHoraryChartData;
@@ -498,7 +510,15 @@ async function deliverChartReadingFreeform(ctx, uid, s) {
   await ctx.reply('Başka bir sorun olursa yazabilirsin.', Markup.removeKeyboard());
 }
 
-async function routeHoraryQuestion(ctx, uid, text, kb) {
+async function routeHoraryQuestion(ctx, uid, text, kb, opener) {
+  const o = String(opener || '').trim();
+  if (o.length > 3) {
+    try {
+      await ctx.reply(sanitizeAiOutputOrThrow(o, 'horary_opener'), kb);
+    } catch {
+      /* opener opsiyonel */
+    }
+  }
   if (horaryRules.isHoraryRestricted(text)) {
     await ctx.reply(MSG_HORARY_RESTRICTED, kb);
     afterConversationReply(uid, text, MSG_HORARY_RESTRICTED, {
@@ -529,154 +549,56 @@ async function routeHoraryQuestion(ctx, uid, text, kb) {
   await ctx.reply(MSG_HORARY_ASK_PLACE, kb);
 }
 
-async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
-  const skipDigit = options.skipDigitShortcut === true;
-
-  if (!skipDigit && /^[1-4]\b/.test(text.trim())) {
-    const pi = parseMainIntent(text);
-    if (pi.ok) {
-      if (pi.n === 1) {
-        const prof = userProfileStore.getProfile(uid);
-        if (userProfileStore.isProfileComplete(prof)) {
-          sessionStore.set(uid, {
-            ...sessionStore.defaultSession(),
-            step: 'await_topic',
-            intent: 'chart',
-            topicCodePreset: null,
-            pendingFreeformPersonal: null,
-            pendingTopicCode: null,
-            lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
-            ...sessionFieldsFromProfile(prof),
-          });
-          logger.info(`Kısayol:1 kayıtlı profil user_id=${uid}`);
-          await ctx.reply(
-            [
-              'Kayıtlı doğum bilgilerinle devam ediyorum.',
-              'Hangi konuda özet istersin? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim.',
-            ].join('\n'),
-            Markup.removeKeyboard()
-          );
-          return;
-        }
-        sessionStore.set(uid, {
-          step: 'await_date',
-          intent: 'chart',
-          topicCodePreset: null,
-          pendingFreeformPersonal: null,
-          pendingTopicCode: null,
-        });
-        logger.info(`Kısayol:1 doğum toplama user_id=${uid}`);
-        await ctx.reply(
-          'Tamam. Kişisel harita için doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
-          Markup.removeKeyboard()
-        );
-        return;
-      }
-      if (pi.n === 2) {
-        sessionStore.set(uid, {
-          step: 'await_topic_preset',
-          intent: 'chart_topic_first',
-          topicCodePreset: null,
-          pendingFreeformPersonal: null,
-          pendingTopicCode: null,
-        });
-        logger.info(`Kısayol:2 önce konu user_id=${uid}`);
-        await ctx.reply(
-          'Hangi başlıkla ilerleyelim? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim — kısaca yazman yeterli.',
-          Markup.removeKeyboard()
-        );
-        return;
-      }
-      if (pi.n === 3) {
-        sessionStore.set(uid, { step: 'await_concept', intent: 'concept', pendingTopicCode: null });
-        logger.info(`Kısayol:3 kavram user_id=${uid}`);
-        await ctx.reply('Hangi kavramı merak ediyorsun? Kısaca yazabilirsin.', Markup.removeKeyboard());
-        return;
-      }
-      if (pi.n === 4) {
-        logger.info(`Kısayol:4 transit yok user_id=${uid}`);
-        await ctx.reply(MSG_UNSUPPORTED, Markup.removeKeyboard());
+async function tryCollectorBrainReply(ctx, uid, s, text, kb) {
+  const prof = userProfileStore.getProfile(uid);
+  let brain;
+  try {
+    brain = await conversationBrain.decide(text, s, prof, env.GROQ_API_KEY, env.GROQ_MODEL, {
+      profileComplete: userProfileStore.isProfileComplete(prof),
+    });
+  } catch (e) {
+    logger.error(`collectorBrain user_id=${uid}`, e);
+    brain = conversationBrain.decideFallback(text, s, prof);
+  }
+  const dr = brain.direct_reply && brain.direct_reply.trim();
+  if (dr && dr.length > 4) {
+    try {
+      const out = sanitizeAiOutputOrThrow(dr, 'collector_brain');
+      await ctx.reply(out, kb);
+      afterConversationReply(uid, text, out, { intent: brain.intent, replyMode: 'direct_chat' });
+      return;
+    } catch (e) {
+      if (isSanitizeDegradedError(e)) {
+        await ctx.reply(MSG_SANITIZE_FAIL, kb);
         return;
       }
     }
   }
+  try {
+    const out = await interpretationService.generateDirectChatReply(text, env.GROQ_API_KEY, env.GROQ_MODEL, {
+      hint: `Oturum adımı: ${s.step}. Nazikçe tek soru veya kısa örnek ver; "anlamadım" deme.`,
+      contextSummary: `Adım: ${s.step}.`,
+    });
+    for (const part of chunkTelegram(out)) {
+      await ctx.reply(part, kb);
+    }
+    afterConversationReply(uid, text, out, { intent: 'collector', replyMode: 'direct_chat' });
+  } catch {
+    const hint =
+      s.step === 'await_date'
+        ? 'Doğum tarihini örneğin 1998-07-07 veya 7.7.1998 gibi yazabilirsin.'
+        : s.step === 'await_place'
+          ? 'Doğduğun yeri şehir ve ülke ile (örn. Bursa, Türkiye) yazabilir misin?'
+          : 'Saati 09:15 gibi yazabilir veya bilinmiyorsa sadece "bilmiyorum" yazman yeterli.';
+    await ctx.reply(['Bu adımda kısa bir bilgi rica edeceğim.', hint].join('\n'), kb);
+  }
+}
 
+async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
   const kb = Markup.removeKeyboard();
   const prof = userProfileStore.getProfile(uid);
-
-  const rawTrim = text.trim();
-  const lowTopic = rawTrim.toLocaleLowerCase('tr-TR');
-  const tpPickEarly = parseTopicCode(text);
-  const looksLikeTopicLabel =
-    tpPickEarly.ok &&
-    rawTrim.length <= 52 &&
-    (/^(genel\s*özet|ilişkiler|iş\s*\/\s*para|iç\s*dünya|iletişim)/i.test(rawTrim) || /^[1-5]$/.test(rawTrim)) &&
-    !/\bbenim\b|\bharitam\b/i.test(lowTopic);
-  if (looksLikeTopicLabel) {
-    sessionStore.set(uid, {
-      ...sessionStore.defaultSession(),
-      step: 'await_topic_preset',
-      intent: 'chart_topic_first',
-      topicCodePreset: null,
-      pendingFreeformPersonal: null,
-      pendingTopicCode: null,
-    });
-    await handleTopicPresetMessage(ctx, uid, sessionStore.get(uid), text);
-    return;
-  }
-
-  const pre = messageClassifier.classifyMessageFallback(text);
-
-  if (pre.category === 'reset_profile') {
-    userProfileStore.deleteProfile(uid);
-    sessionStore.reset(uid);
-    sessionStore.set(uid, { step: 'await_intent' });
-    logger.info(`Metin: reset_profile user_id=${uid}`);
-    await ctx.reply(
-      'Kayıtlı doğum profilin silindi. İstersen yeniden doğum bilgisi vererek devam edebilirsin.',
-      kb
-    );
-    await ctx.reply(START_INTRO, kb);
-    return;
-  }
-
-  if (pre.category === 'update_birth_data') {
-    sessionStore.set(uid, {
-      ...sessionStore.defaultSession(),
-      step: 'await_date',
-      intent: 'update_birth',
-      pendingTopicCode: null,
-    });
-    logger.info(`Metin: update_birth_data user_id=${uid}`);
-    await ctx.reply(
-      'Tamam. Yeni doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
-      kb
-    );
-    return;
-  }
-
-  if (pre.category === 'unsupported_transit') {
-    await ctx.reply(MSG_UNSUPPORTED, kb);
-    afterConversationReply(uid, text, MSG_UNSUPPORTED, { intent: 'transit', replyMode: 'direct_answer' });
-    return;
-  }
-
-  if (pre.category === 'risky_question') {
-    await ctx.reply(MSG_RISKY_BOUNDARY, kb);
-    afterConversationReply(uid, text, MSG_RISKY_BOUNDARY, { intent: 'risky', replyMode: 'safety_redirect' });
-    return;
-  }
-
-  if (pre.category === 'general_astro_knowledge' && pre.reason === 'birth_time_faq') {
-    await ctx.reply(MSG_BIRTH_TIME_FAQ, kb);
-    afterConversationReply(uid, text, MSG_BIRTH_TIME_FAQ, {
-      intent: 'birth_time_faq',
-      replyMode: 'general_astro',
-    });
-    return;
-  }
-
   const profileComplete = userProfileStore.isProfileComplete(prof);
+
   let brain;
   try {
     brain = await conversationBrain.decide(text, s, prof, env.GROQ_API_KEY, env.GROQ_MODEL, {
@@ -696,6 +618,44 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
     await ctx.reply(MSG_INTENT_GROQ_FALLBACK, kb);
   }
 
+  if (brain.account_action === 'reset_profile') {
+    userProfileStore.deleteProfile(uid);
+    sessionStore.reset(uid);
+    sessionStore.set(uid, { step: 'await_intent', conversationHistory: [] });
+    let ack = 'Kayıtlı doğum profilin silindi. İstersen doğum bilgisiyle yeniden başlayabilirsin.';
+    if (brain.direct_reply && brain.direct_reply.trim().length > 8) {
+      try {
+        ack = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'reset_ack');
+      } catch {
+        /* keep default ack */
+      }
+    }
+    await ctx.reply(ack, kb);
+    afterConversationReply(uid, text, ack, { intent: 'reset', replyMode: 'direct_chat' });
+    await ctx.reply(START_INTRO, kb);
+    return;
+  }
+
+  if (brain.account_action === 'update_birth') {
+    sessionStore.set(uid, {
+      ...sessionStore.defaultSession(),
+      step: 'await_date',
+      intent: 'update_birth',
+      pendingTopicCode: null,
+    });
+    let ack = 'Tamam. Yeni doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)';
+    if (brain.direct_reply && brain.direct_reply.trim().length > 10) {
+      try {
+        ack = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'update_birth_ack');
+      } catch {
+        /* default */
+      }
+    }
+    await ctx.reply(ack, kb);
+    afterConversationReply(uid, text, ack, { intent: 'update_birth', replyMode: 'direct_chat' });
+    return;
+  }
+
   const standardTopicCodes = new Set([
     'general',
     'relationships',
@@ -705,21 +665,33 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
   ]);
 
   if (brain.reply_mode === 'safety_redirect') {
-    await ctx.reply(MSG_RISKY_BOUNDARY, kb);
-    afterConversationReply(uid, text, MSG_RISKY_BOUNDARY, {
-      intent: brain.intent || 'safety',
-      replyMode: 'safety_redirect',
-    });
+    let out = MSG_RISKY_BOUNDARY;
+    if (brain.direct_reply && brain.direct_reply.trim().length > 35) {
+      try {
+        out = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'safety_brain');
+      } catch {
+        out = MSG_RISKY_BOUNDARY;
+      }
+    }
+    await ctx.reply(out, kb);
+    afterConversationReply(uid, text, out, { intent: brain.intent || 'safety', replyMode: 'safety_redirect' });
     return;
   }
 
   if (brain.reply_mode === 'summarize_previous') {
     const last = sessionStore.get(uid).lastAssistantAnswer;
     if (!last || String(last).trim().length < 40) {
-      const soft =
-        brain.user_facing_reply_hint ||
-        'Henüz özetleyebileceğim bir önceki yanıt göremiyorum. Neye bakmamı istediğini bir cümleyle yazar mısın?';
+      let soft =
+        'Az önce uzun bir yanıt göremedim; neye odaklanmamı istersin, bir cümleyle yazabilir misin?';
+      if (brain.direct_reply && brain.direct_reply.trim().length > 10) {
+        try {
+          soft = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'summarize_soft');
+        } catch {
+          /* default soft */
+        }
+      }
       await ctx.reply(soft, kb);
+      afterConversationReply(uid, text, soft, { intent: 'summarize', replyMode: 'direct_chat' });
       return;
     }
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
@@ -745,18 +717,33 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
     return;
   }
 
-  if (brain.reply_mode === 'direct_answer') {
+  if (brain.reply_mode === 'direct_chat') {
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+    if (brain.direct_reply && brain.direct_reply.trim().length > 3) {
+      try {
+        const out = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'brain_direct_chat');
+        for (const part of chunkTelegram(out)) {
+          await ctx.reply(part, kb);
+        }
+        afterConversationReply(uid, text, out, { intent: brain.intent || 'chat', replyMode: 'direct_chat' });
+        return;
+      } catch (e) {
+        if (isSanitizeDegradedError(e)) {
+          await ctx.reply(MSG_SANITIZE_FAIL, kb);
+          return;
+        }
+      }
+    }
     try {
       const ctxSum = buildBrainContextSummary(uid, s, prof);
       const out = await interpretationService.generateDirectChatReply(text, env.GROQ_API_KEY, env.GROQ_MODEL, {
-        hint: brain.user_facing_reply_hint,
+        hint: brain.direct_reply?.trim() || '',
         contextSummary: ctxSum,
       });
       for (const part of chunkTelegram(out)) {
         await ctx.reply(part, kb);
       }
-      afterConversationReply(uid, text, out, { intent: brain.intent || 'chat', replyMode: 'direct_answer' });
+      afterConversationReply(uid, text, out, { intent: brain.intent || 'chat', replyMode: 'direct_chat' });
     } catch (e) {
       if (isSanitizeDegradedError(e)) {
         await ctx.reply(MSG_SANITIZE_FAIL, kb);
@@ -769,18 +756,31 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
   }
 
   if (brain.reply_mode === 'horary') {
-    await routeHoraryQuestion(ctx, uid, text, kb);
+    await routeHoraryQuestion(ctx, uid, text, kb, brain.direct_reply);
     return;
   }
 
   if (brain.reply_mode === 'general_astro') {
+    if (brain.intent === 'birth_time_faq') {
+      await ctx.reply(MSG_BIRTH_TIME_FAQ, kb);
+      afterConversationReply(uid, text, MSG_BIRTH_TIME_FAQ, {
+        intent: 'birth_time_faq',
+        replyMode: 'general_astro',
+      });
+      return;
+    }
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
     try {
-      const out = await astroKnowledgeService.answerGeneralConcept(text, env.GROQ_API_KEY, env.GROQ_MODEL);
-      for (const part of chunkTelegram(out)) {
+      const body = await astroKnowledgeService.answerGeneralConcept(text, env.GROQ_API_KEY, env.GROQ_MODEL);
+      const rawCombo =
+        (brain.direct_reply && brain.direct_reply.trim().length > 5
+          ? `${brain.direct_reply.trim()}\n\n`
+          : '') + body;
+      const combo = sanitizeAiOutputOrThrow(rawCombo, 'general_astro_combo');
+      for (const part of chunkTelegram(combo)) {
         await ctx.reply(part, kb);
       }
-      afterConversationReply(uid, text, out, {
+      afterConversationReply(uid, text, combo, {
         intent: brain.intent || 'general_astro',
         replyMode: 'general_astro',
       });
@@ -792,18 +792,21 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
       }
       logger.error(`Genel sohbet Groq user_id=${uid}`, e);
       await ctx.reply(USER_SOFT_ERROR, kb);
-      return;
     }
-    await ctx.reply('Başka bir astroloji sorusun olursa yazabilirsin.', kb);
     return;
   }
 
   if (brain.reply_mode === 'ask_birth_data') {
     const tpc = brain.topic_code && standardTopicCodes.has(brain.topic_code) ? brain.topic_code : null;
-    const hintMsg =
-      brain.user_facing_reply_hint && brain.user_facing_reply_hint.length > 10
-        ? brain.user_facing_reply_hint
-        : 'Kişisel haritana bakabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+    let hintMsg =
+      'Kişisel haritana bakabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+    if (brain.direct_reply && brain.direct_reply.trim().length > 8) {
+      try {
+        hintMsg = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'ask_birth');
+      } catch {
+        /* default */
+      }
+    }
     sessionStore.set(uid, {
       ...sessionStore.defaultSession(),
       step: 'await_date',
@@ -813,6 +816,7 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
       topicCodePreset: null,
     });
     await ctx.reply(hintMsg, kb);
+    afterConversationReply(uid, text, hintMsg, { intent: brain.intent || 'ask_birth', replyMode: 'ask_birth_data' });
     return;
   }
 
@@ -828,6 +832,14 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
           await ctx.reply(MSG_SAVED_PROFILE_HINT, kb);
         }
         sessionStore.set(uid, { ...sessionStore.get(uid), lastChartData: resolved.chart });
+        const ack = brain.direct_reply?.trim();
+        if (ack && ack.length > 3) {
+          try {
+            await ctx.reply(sanitizeAiOutputOrThrow(ack, 'personal_ack'), kb);
+          } catch {
+            /* yok */
+          }
+        }
         await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
         try {
           const ans = await interpretationService.answerPersonalQuestion(
@@ -852,7 +864,6 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
           logger.error(`Kişisel yorum hatası user_id=${uid}`, e);
           await ctx.reply(USER_SOFT_ERROR, kb);
         }
-        await ctx.reply('Sormaya devam edebilirsin.', kb);
         return;
       }
       sessionStore.set(uid, {
@@ -875,11 +886,17 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
         hasKnownBirthTime: null,
       });
       logger.info(`Kişisel (serbest) -> doğum toplama user_id=${uid}`);
-      const askFree =
-        brain.user_facing_reply_hint && brain.user_facing_reply_hint.length > 12
-          ? brain.user_facing_reply_hint
-          : 'Bunu kişisel haritanda görmek için önce doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+      let askFree =
+        'Bunu kişisel haritanda görmek için önce doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+      if (brain.direct_reply && brain.direct_reply.trim().length > 12) {
+        try {
+          askFree = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'ask_freeform');
+        } catch {
+          /* default */
+        }
+      }
       await ctx.reply(askFree, kb);
+      afterConversationReply(uid, text, askFree, { intent: 'ask_birth', replyMode: 'ask_birth_data' });
       return;
     }
 
@@ -892,7 +909,16 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
         step: 'await_intent',
       };
       logger.info(`Doğal dil -> konu yorumu topic=${topicCode} profil var user_id=${uid}`);
-      await ctx.reply('Kayıtlı bilgilerinle haritanı hazırlıyorum…', kb);
+      const ack = brain.direct_reply?.trim();
+      if (ack && ack.length > 3) {
+        try {
+          await ctx.reply(sanitizeAiOutputOrThrow(ack, 'topic_prep'), kb);
+        } catch {
+          await ctx.reply('Kayıtlı bilgilerinle haritana bakıyorum…', kb);
+        }
+      } else {
+        await ctx.reply('Kayıtlı bilgilerinle haritana bakıyorum…', kb);
+      }
       await deliverChartReading(ctx, uid, merged, topicCode, text);
       return;
     }
@@ -906,41 +932,35 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
       topicCodePreset: null,
     });
     logger.info(`Doğal dil -> konu yorumu topic=${topicCode} doğum bekleniyor user_id=${uid}`);
-    const askStr =
-      brain.user_facing_reply_hint && brain.user_facing_reply_hint.length > 12
-        ? brain.user_facing_reply_hint
-        : 'Bunu haritandan yorumlayabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+    let askStr =
+      'Bunu haritandan yorumlayabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)';
+    if (brain.direct_reply && brain.direct_reply.trim().length > 12) {
+      try {
+        askStr = sanitizeAiOutputOrThrow(brain.direct_reply.trim(), 'ask_structured');
+      } catch {
+        /* default */
+      }
+    }
     await ctx.reply(askStr, kb);
+    afterConversationReply(uid, text, askStr, { intent: 'ask_birth', replyMode: 'ask_birth_data' });
     return;
   }
 
-  await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+  let warm = 'Buradayım; harita, astro kavramı veya soru anı için yazdığında devam edelim.';
+  if (brain.direct_reply && brain.direct_reply.trim().length > 5) {
+    warm = brain.direct_reply.trim();
+  }
   try {
-    const ctxSum = buildBrainContextSummary(uid, s, prof);
-    const out = await interpretationService.generateDirectChatReply(text, env.GROQ_API_KEY, env.GROQ_MODEL, {
-      hint:
-        'Mesaj tam oturmadı; nazikçe astroloji konusunda nasıl yardım edebileceğini anlat, tek soru sor.',
-      contextSummary: ctxSum,
-    });
-    for (const part of chunkTelegram(out)) {
-      await ctx.reply(part, kb);
-    }
-    afterConversationReply(uid, text, out, { intent: 'fallback_soft', replyMode: 'direct_answer' });
-  } catch (e) {
-    if (isSanitizeDegradedError(e)) {
-      await ctx.reply(MSG_SANITIZE_FAIL, kb);
-      return;
-    }
-    logger.error(`Son çare sohbet user_id=${uid}`, e);
-    await ctx.reply(
-      [
-        'Şu an tam netleşemedi; ne yapmak istediğini bir cümleyle yazabilir misin?',
-        'Harita, astro kavramı veya soru anı (horary) için buradayım.',
-      ].join('\n'),
-      kb
-    );
+    const out = sanitizeAiOutputOrThrow(warm, 'fallback_warm');
+    await ctx.reply(out, kb);
+    afterConversationReply(uid, text, out, { intent: 'fallback', replyMode: 'direct_chat' });
+  } catch {
+    await ctx.reply(warm, kb);
+    afterConversationReply(uid, text, warm, { intent: 'fallback', replyMode: 'direct_chat' });
   }
 }
+
+
 
 bot.start(async (ctx) => {
   const uid = ctx.from.id;
@@ -1155,7 +1175,7 @@ bot.on('text', async (ctx) => {
 
   if (step === 'await_concept') {
     if (text.length < 2) {
-      await ctx.reply('Biraz daha detay yazabilir misin?');
+      await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
       return;
     }
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
@@ -1204,7 +1224,7 @@ bot.on('text', async (ctx) => {
   if (step === 'await_date') {
     const parsed = chartCalculator.parseBirthDate(text);
     if (!parsed.ok) {
-      await ctx.reply(parsed.error);
+      await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
       return;
     }
     sessionStore.set(uid, {
@@ -1222,7 +1242,7 @@ bot.on('text', async (ctx) => {
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
     const geo = await geocodePlace(text);
     if (!geo.ok) {
-      await ctx.reply(geo.error);
+      await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
       return;
     }
     sessionStore.set(uid, {
@@ -1246,7 +1266,7 @@ bot.on('text', async (ctx) => {
   if (step === 'await_time') {
     const tp = chartCalculator.parseBirthTime(text);
     if (!tp.ok) {
-      await ctx.reply(tp.error);
+      await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
       return;
     }
     const hasKnownBirthTime = !tp.unknown;
@@ -1276,7 +1296,7 @@ bot.on('text', async (ctx) => {
 
     if (full.topicCodePreset) {
       await ctx.reply(modeMsg);
-      await deliverChartReading(ctx, uid, full, full.topicCodePreset);
+      await deliverChartReading(ctx, uid, full, full.topicCodePreset, text);
       return;
     }
 
@@ -1285,7 +1305,7 @@ bot.on('text', async (ctx) => {
       await ctx.reply(modeMsg);
       const forRead = { ...full, pendingTopicCode: null };
       sessionStore.set(uid, forRead);
-      await deliverChartReading(ctx, uid, forRead, tpc);
+      await deliverChartReading(ctx, uid, forRead, tpc, text);
       return;
     }
 
@@ -1330,20 +1350,22 @@ bot.on('text', async (ctx) => {
       await deliverChartReading(ctx, uid, s, b2.topic_code, text);
       return;
     }
-    await ctx.reply(
-      [
-        tp.error,
-        '',
-        'Başka bir konuda devam etmek veya soru sormak istersen kısaca yazman yeterli.',
-      ].join('\n'),
-      Markup.removeKeyboard()
-    );
+    if (b2.reply_mode === 'direct_chat' && b2.direct_reply && b2.direct_reply.trim().length > 4) {
+      try {
+        const out = sanitizeAiOutputOrThrow(b2.direct_reply.trim(), 'await_topic_brain');
+        await ctx.reply(out, Markup.removeKeyboard());
+        afterConversationReply(uid, text, out, { intent: b2.intent, replyMode: 'direct_chat' });
+      } catch {
+        await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
+      }
+      return;
+    }
+    await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
     return;
   }
 
   logger.warn(`Beklenmeyen adım user_id=${uid} step=${step}`);
-  await ctx.reply('Beklenmeyen durum. /start ile baştan başlayalım.');
-  sessionStore.reset(uid);
+  await tryCollectorBrainReply(ctx, uid, s, text, Markup.removeKeyboard());
 });
 
 const HOST = process.env.HOST || '0.0.0.0';
