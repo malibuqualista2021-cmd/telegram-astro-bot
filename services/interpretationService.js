@@ -1,9 +1,11 @@
 /**
  * AI yorum katmanı — sadece verilen chartData üzerinden metin üretir.
- * OPENAI_API_KEY yoksa aynı veriye dayalı kısa şablon yanıt (MVP yedek).
+ * OPENAI_API_KEY uygulama açılışında doğrulanır; burada yalnızca API çağrısı yapılır.
+ * Hata durumunda üst katmana fırlatılır (kullanıcı mesajı index.js’te).
  */
 
 const OpenAI = require('openai');
+const logger = require('./logger');
 
 const TOPIC_LABEL_TR = {
   general: 'Genel özet',
@@ -12,29 +14,6 @@ const TOPIC_LABEL_TR = {
   inner_family: 'İç dünya, duygular, aile',
   communication_learning: 'İletişim, öğrenme, kendini ifade',
 };
-
-const SIGN_TR = {
-  Aries: 'Koç',
-  Taurus: 'Boğa',
-  Gemini: 'İkizler',
-  Cancer: 'Yengeç',
-  Leo: 'Aslan',
-  Virgo: 'Başak',
-  Libra: 'Terazi',
-  Scorpio: 'Akrep',
-  Sagittarius: 'Yay',
-  Capricorn: 'Oğlak',
-  Aquarius: 'Kova',
-  Pisces: 'Balık',
-};
-
-function trSign(s) {
-  return SIGN_TR[s] || s;
-}
-
-function planet(chartData, id) {
-  return chartData.planets.find((p) => p.id === id);
-}
 
 function buildSystemPrompt() {
   return [
@@ -57,65 +36,13 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
-function buildFallback(chartData) {
-  const mode = chartData.data_availability.chart_mode;
-  const topic =
-    TOPIC_LABEL_TR[chartData.interpretation_request?.topic_code] || 'Genel özet';
-  const sun = planet(chartData, 'Sun');
-  const moon = planet(chartData, 'Moon');
-  const asc = chartData.angles?.ASC;
+async function generateInterpretation(chartData, apiKey, model) {
+  logger.info('AI yorum üretimi başladı', {
+    topic: chartData.interpretation_request?.topic_code,
+    chart_mode: chartData.chart_mode,
+  });
 
-  const lines = [];
-  lines.push(
-    mode === 'full'
-      ? 'Mod: Tam harita (Placidus evler ve yükselen hesaba katıldı).'
-      : 'Mod: Kısmi harita (doğum saati olmadığı için yükselen ve ev yerleşimleri yok; Güneş, Ay ve gezegen burçları + açılar kullanıldı).'
-  );
-
-  const theme0 = chartData.themes?.items?.[0];
-  lines.push('');
-  lines.push('Ana tema:');
-  if (theme0) {
-    lines.push(`- ${theme0.description}`);
-  }
-  lines.push(
-    `- Güneş ${trSign(sun.sign)} burcunda; Ay ${trSign(moon.sign)} burcunda.`
-  );
-  if (mode === 'full' && asc) {
-    lines.push(`- Yükselen ${trSign(asc.sign)}.`);
-  }
-
-  lines.push('');
-  lines.push(`${topic} (harita verisine dayalı kısa notlar):`);
-  const picks = chartData.planets
-    .filter((p) => ['Venus', 'Mars', 'Mercury', 'Saturn', 'Jupiter'].includes(p.id))
-    .slice(0, 5);
-  for (const p of picks) {
-    const house = mode === 'full' && p.house ? `, ${p.house}. ev` : '';
-    lines.push(`- ${p.id} ${trSign(p.sign)} burcunda${house}.`);
-  }
-
-  lines.push('');
-  lines.push('Pratik:');
-  lines.push('- Bugün için küçük bir nefes molası ve net bir cümleyle ihtiyaçlarını ifade etmeyi dene.');
-  lines.push('- Konuşurken hem duygunu hem sınırını aynı cümlede taşımayı pratik et (zor gelirse tek cümle yeter).');
-
-  lines.push('');
-  lines.push(
-    'Hatırlatma: Bu metin eğlence ve kişisel farkındalık içindir; tıbbi, hukuki veya finansal karar yerine geçmez.'
-  );
-
-  return lines.join('\n');
-}
-
-async function generateInterpretation(chartData) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    return buildFallback(chartData);
-  }
-
-  const client = new OpenAI({ apiKey: key });
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const client = new OpenAI({ apiKey });
 
   const topicCode = chartData.interpretation_request?.topic_code || 'general';
   const topicLabel = TOPIC_LABEL_TR[topicCode] || topicCode;
@@ -144,11 +71,15 @@ async function generateInterpretation(chartData) {
     });
 
     const text = completion.choices[0]?.message?.content?.trim();
-    if (!text) return buildFallback(chartData);
+    if (!text) {
+      logger.warn('AI yorum boş döndü');
+      throw new Error('EMPTY_INTERPRETATION');
+    }
+    logger.info('AI yorum üretimi bitti');
     return text;
   } catch (e) {
-    console.error('OpenAI yorum hatası:', e.message);
-    return buildFallback(chartData);
+    logger.error('AI yorum üretimi hata', e);
+    throw e;
   }
 }
 

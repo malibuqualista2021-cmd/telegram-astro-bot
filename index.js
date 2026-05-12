@@ -1,23 +1,43 @@
-require('dotenv').config();
+const { loadEnv } = require('./config/env');
+const env = loadEnv();
 
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
+const logger = require('./services/logger');
 const sessionStore = require('./services/sessionStore');
 const chartCalculator = require('./services/chartCalculator');
 const interpretationService = require('./services/interpretationService');
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-if (!BOT_TOKEN) {
-  console.error('Hata: .env içinde BOT_TOKEN tanımlı değil.');
-  process.exit(1);
-}
+const USER_SOFT_ERROR =
+  'Şu an yorum hazırlanırken küçük bir sorun oluştu. Lütfen biraz sonra tekrar dene.';
+
+const GEOCODE_UA =
+  env.GEOCODE_USER_AGENT || 'TelegramAstroMVP/1.0 (https://github.com/)';
 
 const app = express();
-app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'telegram-astro-bot' });
+
+app.get('/', (req, res) => {
+  res.type('text/plain').send('Astrology bot is running');
 });
 
-const bot = new Telegraf(BOT_TOKEN);
+app.get('/health', (req, res) => {
+  res.type('text/plain').send('Astrology bot is running');
+});
+
+const bot = new Telegraf(env.BOT_TOKEN);
+
+bot.catch((err, ctx) => {
+  logger.error('Telegram bot hatası (bot.catch)', err);
+  if (ctx && typeof ctx.reply === 'function') {
+    ctx.reply(USER_SOFT_ERROR).catch((e) => {
+      logger.error('Kullanıcıya hata mesajı gönderilemedi', e);
+    });
+  }
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('unhandledRejection', reason);
+});
 
 const topicKeyboard = Markup.keyboard([
   ['1 Genel özet'],
@@ -53,10 +73,7 @@ async function geocodePlace(query) {
   url.searchParams.set('q', q);
   url.searchParams.set('format', 'json');
   url.searchParams.set('limit', '1');
-  const ua =
-    process.env.GEOCODE_USER_AGENT ||
-    'TelegramAstroMVP/1.0 (https://github.com/)';
-  const res = await fetch(url, { headers: { 'User-Agent': ua } });
+  const res = await fetch(url, { headers: { 'User-Agent': GEOCODE_UA } });
   if (!res.ok) {
     return { ok: false, error: 'Konum servisi şu an cevap vermedi. Biraz sonra tekrar dene.' };
   }
@@ -102,6 +119,7 @@ function parseTopicCode(text) {
 }
 
 bot.start(async (ctx) => {
+  logger.info(`Kullanıcı /start yazdı user_id=${ctx.from?.id}`);
   sessionStore.reset(ctx.from.id);
   sessionStore.set(ctx.from.id, { step: 'await_date' });
   await ctx.reply(
@@ -151,6 +169,7 @@ bot.on('text', async (ctx) => {
       birthYmd: { year: parsed.year, month: parsed.month, day: parsed.day },
       birthDateText: text,
     });
+    logger.info(`Veri toplama: doğum tarihi alındı user_id=${uid} step=await_place`);
     await ctx.reply('Süper. Doğduğun yer neresi? (örn: Bursa, Türkiye)');
     return;
   }
@@ -170,6 +189,7 @@ bot.on('text', async (ctx) => {
       latitude: geo.latitude,
       longitude: geo.longitude,
     });
+    logger.info(`Veri toplama: doğum yeri alındı user_id=${uid} step=await_time`);
     await ctx.reply(
       [
         'Tamamdır.',
@@ -205,6 +225,10 @@ bot.on('text', async (ctx) => {
       ? 'Saatin net: tam harita modu (yükselen ve evler dahil).'
       : 'Saat bilinmiyor: kısmi harita modu (yükselen ve ev yok; öğle saati varsayımıyla gezegen burçları ve açılar hesaplandı).';
 
+    logger.info(
+      `Veri toplama: doğum saati kaydedildi user_id=${uid} step=await_topic has_time=${hasKnownBirthTime}`
+    );
+
     await ctx.reply(
       [modeMsg, '', 'Şimdi hangi konuda odaklanayım? Aşağıdan seç veya 1–5 yaz:'].join(
         '\n'
@@ -225,6 +249,7 @@ bot.on('text', async (ctx) => {
 
     let chartData;
     try {
+      logger.info(`Harita hesaplama başladı user_id=${uid}`);
       chartData = chartCalculator.calculateChart({
         year: s.birthYmd.year,
         month: s.birthYmd.month,
@@ -236,18 +261,17 @@ bot.on('text', async (ctx) => {
         hasKnownBirthTime: s.hasKnownBirthTime,
         placeLabel: s.placeLabel,
       });
+      logger.info(`Harita hesaplama bitti user_id=${uid}`);
     } catch (e) {
-      console.error(e);
-      await ctx.reply(
-        'Haritayı hesaplarken bir sorun oluştu. Tarih ve konumu kontrol edip /start ile tekrar dene.',
-        Markup.removeKeyboard()
-      );
+      logger.error(`Harita hesaplama hatası user_id=${uid}`, e);
+      await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
       sessionStore.reset(uid);
       return;
     }
 
     if (!chartData.planets || chartData.planets.length < 10) {
-      await ctx.reply('Harita verisi eksik görünüyor. /start ile tekrar dene.', Markup.removeKeyboard());
+      logger.warn(`Harita verisi eksik user_id=${uid}`);
+      await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
       sessionStore.reset(uid);
       return;
     }
@@ -259,10 +283,16 @@ bot.on('text', async (ctx) => {
 
     let interpretation;
     try {
-      interpretation = await interpretationService.generateInterpretation(chartData);
+      interpretation = await interpretationService.generateInterpretation(
+        chartData,
+        env.OPENAI_API_KEY,
+        env.OPENAI_MODEL
+      );
     } catch (e) {
-      console.error(e);
-      interpretation = 'Yorum üretilemedi. Biraz sonra /start ile tekrar dene.';
+      logger.error(`AI yorum hatası user_id=${uid}`, e);
+      await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
+      sessionStore.reset(uid);
+      return;
     }
 
     const parts = chunkTelegram(interpretation);
@@ -276,19 +306,38 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  logger.warn(`Beklenmeyen adım user_id=${uid} step=${step}`);
   await ctx.reply('Beklenmeyen durum. /start ile baştan başlayalım.');
   sessionStore.reset(uid);
 });
 
-const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, () => {
-  console.log(`Health: http://${HOST}:${PORT}/health`);
+const server = app.listen(env.PORT, HOST, () => {
+  logger.info(`HTTP hazır: / ve /health — port=${env.PORT} host=${HOST}`);
 });
 
-bot.launch().then(() => {
-  console.log('Telegram bot çalışıyor.');
-});
+bot
+  .launch()
+  .then(() => {
+    logger.info('Bot başladı: Telegram polling aktif.');
+  })
+  .catch((e) => {
+    logger.error('Telegram bot.launch başarısız', e);
+    process.exit(1);
+  });
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+function shutdown(signal) {
+  logger.info(`Kapanıyor: ${signal}`);
+  bot.stop(signal);
+  server.close(() => {
+    logger.info('HTTP sunucusu kapatıldı.');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.warn('HTTP kapanışı zaman aşımı, çıkılıyor.');
+    process.exit(0);
+  }, 8000).unref();
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));
