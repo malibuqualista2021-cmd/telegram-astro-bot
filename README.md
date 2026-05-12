@@ -1,165 +1,102 @@
-# Telegram Astroloji Asistanı
+# Telegram doğum haritası botu (MVP)
 
-`python-telegram-bot` ile çalışan, yerel bilgi tabanı + **LLM** (OpenAI, **Groq** veya **Google Gemini**) ile desteklenen genel astroloji bilgisi botu. OpenAI hesabı zorunlu değildir.
+Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; ardından **OpenAI** ile veya API anahtarı yoksa **yerleşik şablonla** Türkçe kişisel yorum üretir.
 
-## Özellikler (özet)
+## Gereksinimler
 
-- **Komutlar:** `/start`, `/help`, `/menu`, `/lang`, `/profil`, `/dogum`, `/saat`, `/konum`, `/harita`, `/sss`, `/burclar`, `/hakkinda`
-- **Kişisel profil:** doğum tarihi/saati ve konum (enlem/boylam); LLM yanıtlarına yumuşak bağlam olarak eklenir
-- **Eğitim amaçlı harita özeti:** **Swiss Ephemeris** (`pyswisseph`). **.se1** ephemeris dosyaları yoksa hesaplar Astro.com vb. ile uyuşmayabilir → ortam değişkeni `SWISS_EPHE_PATH` ve Telegram’da **`/hesapdurumu`** (veya `/ephemeris`) ile sunucuda test. Veri dosyaları (telifli yorum değil): [astro.com Swiss Ephemeris FTP](https://www.astro.com/ftp/swisseph/ephe/). Yedek motor: `ephem` (yaklaşık)
-- **Niyet:** bilgi / günlük-fal tarzı / şaka — yanıt tonu için ipuçları
-- **Özet hafıza:** uzun sohbette eski kısım LLM ile özetlenir (`MEMORY_SUMMARIZE_AT_MSGS`)
-- **Dil:** `/lang tr` veya `/lang en` — bot metinleri + LLM çıktısı dili
-- **Inline menü:** SSS kategorileri, burç listesi, yardım, hakkında (düğmelerle gezinme)
-- **Serbest metin:** Önce `knowledge/faq.json` (alt dize + **rapidfuzz** bulanık eşleşme), yoksa seçilen LLM
-- **Sohbet üslubu (komutsuz):** Düz yazıyla örn. «sadece bilgi», «sohbet gibi», «günlük fal tarzı», «haritama göre», «horary» / «saat astrolojisi» — kalıcı mod; özel sohbette `chat_mode` veritabanında saklanır
-- **Horary (eğitim):** «horary» modundayken her LLM yanıtında sorunun sorulduğu Telegram mesajının UTC zamanı + konum (`/konum` veya varsayılan) ile anlık harita özeti modele eklenir; otomatik klasik horary hükümü yok
-- **Bağlam:** Son birkaç tur sohbet modele özet bağlam olarak gider (`CONVERSATION_MAX_TURNS`)
-- **Spam önleme:** Sohbet başına dakikalık hız sınırı (`RATE_LIMIT_PER_MINUTE`)
-- **UX:** Yanıt üretilirken “yazıyor…” göstergesi
-- **Güvenlik çerçevesi:** Sistem + kullanıcı notu ile tıbbi/hukuki/finansal yönlendirme yok; emin olunmayan konularda çekingenlik
-- **Loglama:** Konsol + yedeklemeli günlük dosyası (`logs/astro_bot.log`)
-- **Uçtan uca çalışma:** **Long polling** (Railway veya kendi sunucunda süreç olarak çalışır; ayrı web sunucusu gerekmez)
-- **Kalıcı veri (özel sohbet):** `data/bot_state.db` (SQLite) veya **`DATABASE_URL`** ile PostgreSQL — dil, profil, sohbet özeti; süreç yeniden başlasa da kalır (Railway’de kalıcılık için Postgres önerilir)
-- **Özel sohbet:** Serbest metin (SSS → LLM) birebir sohbette her mesajda
-- **Gruplar:** Metinle yanıt yalnızca mesajda **`@botkullaniciadi`** geçtiğinde (mention sonrası kalan metin işlenir; maliyet kontrolü)
-- **Geri bildirim:** LLM yanıtının altında 👍/👎 — kayıt `data/analytics.db` (SQLite)
-- **SSS çevirisi:** `faq.json` içinde `answer_en` — `/lang en` iken kullanılır
-- **Girdi sınırı:** `MAX_USER_MESSAGE_CHARS` ile mesaj kırpma (token/maliyet)
-- **İzleme:** İsteğe bağlı **`SENTRY_DSN`**
+- Node.js **18+** (global `fetch` için)
 
-## GitHub’a gönderme
-
-1. [GitHub](https://github.com/new) üzerinde **yeni boş bir repository** oluştur (README ekleme).
-2. Bilgisayarda proje klasöründe:
-
-```powershell
-cd c:\Users\malib\telegram-astro-bot
-git init
-git add .
-git commit -m "Initial commit: Telegram astroloji bot"
-git branch -M main
-git remote add origin https://github.com/KULLANICI_ADIN/REPO_ADI.git
-git push -u origin main
-```
-
-`KULLANICI_ADIN/REPO_ADI` kısmını kendi repo adresinle değiştir. İlk kez `git` kullanıyorsan `git config --global user.name` ve `user.email` ayarlaman istenebilir.
-
-**.env dosyasını asla commit etme** — `.gitignore` içinde; token’lar sadece Railway’de (veya yerelde) ortam değişkeni olarak kalır.
-
-## Railway’de çalıştırma
-
-1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub repo** → bu repoyu seç.
-2. **Variables** bölümüne ekle:
-   - `TELEGRAM_BOT_TOKEN` (zorunlu)
-   - LLM anahtarı (**en az biri**): `GROQ_API_KEY` (ücretsiz katman: [Groq](https://console.groq.com/keys)), veya `OPENAI_API_KEY`, veya `GEMINI_API_KEY` / `GOOGLE_API_KEY`
-   - **Kalıcılık için önerilir:** Railway **PostgreSQL** ekle → `DATABASE_URL` otomatik gelir (profil/sohbet diskte kalır; yalnızca SQLite + geçici disk kullanırsan redeploy’da silinebilir)
-   - **Harita doğruluğu:** `.se1` dosyalarını bir volume veya build aşamasında imaj içine koyup `SWISS_EPHE_PATH` ver (yoksa Swiss hesapları zayıf kalır; bkz. yukarıdaki “Swiss Ephemeris” bölümü)
-   - İsteğe bağlı: `LLM_PROVIDER`, `LLM_MODEL`, `SENTRY_DSN`, `LOG_LEVEL`, vb. (`.env.example`)
-3. Deploy ayarında başlangıç komutu repodaki `railway.toml` ile **`python -m astro_bot`** olarak ayarlanır; farklı bir şey yazma.
-4. Deploy tamamlanınca loglarda `Polling başlatılıyor` benzeri satırları görmelisin; Telegram’da bota yazarak dene.
-
-**Not:** Railway arayüzünde servis türü “web” gibi HTTP bekleyen bir şablon seçtiysen ve deploy takılıyorsa, bu proje **HTTP sunucusu açmaz**; uzun süre çalışan **tek süreç** (worker) olarak düşün. Gerekirse Railway dokümantasyonundan “custom start command / background worker” benzeri kuruluma bak.
-
-## Swiss Ephemeris — doğru konumlar için (önemli)
-
-Bot, ticari sitelerin çoğuyla aynı sınıfta motor olan **Swiss Ephemeris** kullanır; ancak sunucuda **`pyswisseph` tek başına yetmez** — **ikili ephemeris dosyaları** (`.se1`) gerekir. Bunlar Astro.com’un **resmi FTP** alanında **halka açık veri** olarak durur (sayfa yorumu değil, gökyüzü çizelgesi):
-
-1. Örn. klasör: `C:\sweph\ephe` (Linux’ta `/opt/sweph/ephe`).
-2. [https://www.astro.com/ftp/swisseph/ephe/](https://www.astro.com/ftp/swisseph/ephe/) adresinden en az **gezegen + Ay** dosyalarını indir (ör. `sepl_18.se1`, `semo_18.se1` — ihtiyaca göre paket açıklamasına bak).
-3. `.env` veya sunucu ortamına ekle: `SWISS_EPHE_PATH=C:\sweph\ephe` (kendi yolun).
-4. Botu yeniden başlat. Telegram’da **`/hesapdurumu`** ile test: Güneş 2000-01-01 değeri ~279–281° civarında olmalı.
-
-Yanlış veya eksik `.se1` → yanlış boylamlar veya `ephem` yedeğine düşme; kullanıcı “site doğru, bot yanlış” sanır. Konum/tarih için ayrıca **`/konum`**, **`tzdata`** ve doğru **IANA** saat dilimi gerekir.
-
-## Kurulum (yerel)
-
-1. Python 3.10+ önerilir.
-
-2. Sanal ortam (isteğe bağlı):
+## Kurulum
 
 ```bash
-python -m venv .venv
-```
-
-Windows (PowerShell):
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-3. Bağımlılıklar:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. `.env` — `.env.example` dosyasını kopyalayıp doldurun:
-
-```powershell
+cd telegram-astro-bot
+npm install
 copy .env.example .env
 ```
 
-- `TELEGRAM_BOT_TOKEN`: [@BotFather](https://t.me/BotFather)
-- LLM: `GROQ_API_KEY` ([Groq](https://console.groq.com/keys)) veya `OPENAI_API_KEY` veya `GEMINI_API_KEY` — ayrıntılar `.env.example`
-- İsteğe bağlı: `LLM_PROVIDER`, `LLM_MODEL`, `LOG_LEVEL`, `OPENAI_MAX_TOKENS`, `OPENAI_TEMPERATURE`, `FAQ_FUZZY_THRESHOLD`, `RATE_LIMIT_PER_MINUTE`, `CONVERSATION_MAX_TURNS`
+`.env` içinde en az **`BOT_TOKEN`** olmalı (Telegram [@BotFather](https://t.me/BotFather)).
+
+İsteğe bağlı:
+
+- **`OPENAI_API_KEY`** — yoksa yorum yine çalışır (şablon modu).
+- **`OPENAI_MODEL`** — varsayılan `gpt-4o-mini`.
+- **`GEOCODE_USER_AGENT`** — OpenStreetMap Nominatim için tanımlayıcı (politika gereği anlamlı bir değer verin).
+- **`PORT`** — varsayılan `3000`.
 
 ## Çalıştırma
 
-Proje kökünden:
+```bash
+npm start
+```
+
+- Telegram bot **long polling** ile ayağa kalkar.
+- `http://localhost:PORT/health` adresinde basit sağlık kontrolü vardır.
+
+## Dosya yapısı
+
+| Dosya | Görev |
+|--------|--------|
+| `index.js` | Express + Telegraf akışı |
+| `services/chartCalculator.js` | Harita hesaplama (AI yapmaz) |
+| `services/interpretationService.js` | Yorum metni (OpenAI veya yedek şablon) |
+| `services/sessionStore.js` | Bellek içi oturum |
+
+## Notlar (MVP)
+
+- Doğum yeri metni **Nominatim** ile koordinata çevrilir; ağ erişimi gerekir.
+- Saat bilinmiyorsa harita **kısmi** moddadır: yükselen ve evler JSON’da yoktur; gezegen burçları için yerel **12:00** kullanılır (kütüphane timezone’u koordinattan türetir).
+- Oturum verisi bellekte tutulur; sunucu yeniden başlayınca sıfırlanır.
+
+## GitHub ve Railway ile canlıya alma
+
+### 1) GitHub deposu
+
+Proje kökünde (bu klasörde):
 
 ```bash
-python -m astro_bot
+git init
+git add .
+git commit -m "Initial MVP: Telegram astro bot"
 ```
 
-## Proje yapısı
+**Seçenek A — GitHub CLI (`gh`)**
 
-```
-telegram-astro-bot/
-├── astro_bot/
-│   ├── __main__.py
-│   ├── main.py
-│   ├── config.py
-│   ├── settings.py
-│   ├── i18n.py
-│   ├── handlers/
-│   │   ├── commands.py
-│   │   ├── callbacks.py
-│   │   ├── keyboards.py
-│   │   ├── persistence.py
-│   │   └── messages.py
-│   └── services/
-│       ├── faq_service.py
-│       ├── llm_service.py
-│       ├── profile_service.py
-│       ├── chart_service.py
-│       ├── horary_service.py
-│       ├── intent_service.py
-│       ├── memory_service.py
-│       ├── feedback_store.py
-│       └── rate_limit.py
-├── knowledge/
-│   └── faq.json
-├── logs/                 # çalışınca oluşur (.gitignore)
-├── .env.example
-├── railway.toml
-├── Procfile
-├── requirements.txt
-└── README.md
+```bash
+gh auth login
+gh repo create telegram-astro-bot --public --source=. --remote=origin --push
 ```
 
-## Bilgi tabanı (`faq.json`)
+Depo adını değiştirmek istersen `telegram-astro-bot` yerine kendi adını yaz.
 
-İki biçim desteklenir:
+**Seçenek B — Web arayüzü**
 
-1. **Dizi:** `[{ "id", "triggers", "answer", ... }, ...]`
-2. **Nesne:** `{ "meta": { "categories": { "kategori_kodu": "Görünen ad" } }, "entries": [ ... ] }`
+1. [GitHub](https://github.com/new) üzerinden yeni repo oluştur (boş, README ekleme).
+2. Aşağıdaki komutlarda `KULLANICI` ve `REPO` kısımlarını kendi hesabınla değiştir:
 
-Her kayıt için önerilen alanlar:
+```bash
+git remote add origin https://github.com/KULLANICI/REPO.git
+git branch -M main
+git push -u origin main
+```
 
-- `id`, `category`, `title`, `triggers`, `answer`, isteğe bağlı `answer_en` (İngilizce SSS)
+### 2) Railway
 
-## Notlar
+1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub repo** → bu repoyu seç.
+2. **Variables** (ortam değişkenleri) ekle:
 
-- Bu bot yalnızca genel astroloji / kültürel bilgi amaçlıdır; profesyonel danışmanlık yerine geçmez.
-- Kullandığın LLM sağlayıcısının ve Telegram’ın kullanım limitleri / ücretleri geçerlidir.
+| Değişken | Zorunlu | Açıklama |
+|----------|---------|----------|
+| `BOT_TOKEN` | Evet | Telegram bot token |
+| `OPENAI_API_KEY` | Hayır | Yorum için OpenAI |
+| `OPENAI_MODEL` | Hayır | Örn. `gpt-4o-mini` |
+| `GEOCODE_USER_AGENT` | Önerilir | Nominatim için; örn. `MyAstroBot/1.0 (github.com/kullanici/repo)` |
+| `PORT` | Hayır | Railway genelde otomatik verir; yoksa uygulama 3000 kullanır |
+
+3. **Deploy**: `npm start` ile süreç ayağa kalkar (Railway `PORT` atar; sunucu `0.0.0.0` üzerinde dinler).
+4. **Sağlık kontrolü**: Railway sana verdiği alan adında `https://<domain>/health` → `{"ok":true,...}` görmelisin.
+
+Bu MVP **long polling** kullanır; ayrıca webhook URL’i tanımlaman gerekmez. Tek servis/replica kullan (aynı `BOT_TOKEN` ile iki yerden polling yapma).
+
+## Lisans
+
+MIT

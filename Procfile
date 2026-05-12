@@ -1,2 +1,2 @@
-# Bazı platformlar için; Railway öncelikle railway.toml startCommand kullanır.
-worker: python -m astro_bot
+# Railway öncelikle railway.toml içindeki startCommand kullanır.
+web: npm start

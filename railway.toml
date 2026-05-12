@@ -1,10 +1,11 @@
-# Railway: GitHub'dan deploy + ortam değişkenleri (TELEGRAM_BOT_TOKEN, OPENAI_API_KEY)
+# Railway: GitHub deploy — Node.js bot (Telegraf + Express health)
+# Ortam: BOT_TOKEN, OPENAI_API_KEY (opsiyonel), GEOCODE_USER_AGENT, PORT (Railway verir)
 # https://docs.railway.app/deploy/config-as-code
 
 [build]
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python -m astro_bot"
+startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

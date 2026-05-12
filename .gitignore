@@ -1,15 +1,14 @@
+node_modules/
 .env
-logs/
-data/
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+
 __pycache__/
 *.py[cod]
-*$py.class
-.Python
 .venv/
 venv/
-env/
-*.egg-info/
-dist/
-build/
-.idea/
-.vscode/
+
+# Yerel / hassas veri
+data/
