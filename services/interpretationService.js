@@ -36,6 +36,17 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
+function buildConceptSystemPrompt() {
+  return [
+    'Sen bir astroloji eğitmenisin. Kullanıcı bir kavram veya terim soruyor.',
+    'Yalnızca genel, bilgilendirici ve sade Türkçe ile açıkla; doğum haritası veya kişisel yorum yapma.',
+    '"Senin haritanda", "sana göre", burçları kişiselleştirerek anlatma.',
+    'Klasik falcı veya aşırı mistik dil kullanma; modern ve güven veren bir ton kullan.',
+    'Kısa tut (birkaç paragraf). Kesin kehanet, sağlık, yatırım veya ilişki garantisi verme.',
+    'Markdown kullanma; düz metin.',
+  ].join('\n');
+}
+
 async function generateInterpretation(chartData, apiKey, model) {
   logger.info('AI yorum üretimi başladı', {
     topic: chartData.interpretation_request?.topic_code,
@@ -83,7 +94,48 @@ async function generateInterpretation(chartData, apiKey, model) {
   }
 }
 
+/**
+ * Kişisel harita olmadan yalnızca genel kavram açıklaması (OpenAI).
+ */
+async function explainAstrologicalConcept(userQuestion, apiKey, model) {
+  const q = (userQuestion || '').trim();
+  if (q.length < 2) {
+    throw new Error('QUESTION_TOO_SHORT');
+  }
+
+  logger.info('Genel kavram açıklaması başladı');
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.55,
+      max_tokens: 550,
+      messages: [
+        { role: 'system', content: buildConceptSystemPrompt() },
+        {
+          role: 'user',
+          content: `Kullanıcının sorusu (yalnızca genel açıklama ver, kişisel harita yok):\n${q}`,
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) {
+      logger.warn('Genel kavram yanıtı boş');
+      throw new Error('EMPTY_CONCEPT_REPLY');
+    }
+    logger.info('Genel kavram açıklaması bitti');
+    return text;
+  } catch (e) {
+    logger.error('Genel kavram açıklaması hata', e);
+    throw e;
+  }
+}
+
 module.exports = {
   generateInterpretation,
+  explainAstrologicalConcept,
   TOPIC_LABEL_TR,
 };

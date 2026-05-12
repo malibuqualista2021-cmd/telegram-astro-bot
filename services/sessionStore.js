@@ -7,6 +7,8 @@ const sessions = new Map();
 function defaultSession() {
   return {
     step: 'idle',
+    intent: null,
+    topicCodePreset: null,
     birthDateText: null,
     birthYmd: null,
     placeText: null,
