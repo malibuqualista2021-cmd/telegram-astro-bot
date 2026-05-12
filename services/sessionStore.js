@@ -24,6 +24,8 @@ function defaultSession() {
     topicCode: null,
     pendingTopicCode: null,
     pendingClarifyText: null,
+    horaryQuestionText: null,
+    horaryReceivedUnix: null,
   };
 }
 

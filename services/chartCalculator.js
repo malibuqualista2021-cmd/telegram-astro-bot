@@ -5,6 +5,7 @@
 
 const { Origin, Horoscope } = require('circular-natal-horoscope-js');
 const { DateTime } = require('luxon');
+const tzLookup = require('tz-lookup');
 
 const PLANET_KEYS = [
   'sun',
@@ -150,6 +151,27 @@ function mapAngles(horoscope) {
   };
 }
 
+function mapAnglesWithDscIc(horoscope, houses) {
+  const base = mapAngles(horoscope);
+  const h7 = houses?.find((h) => h.number === 7);
+  const h4 = houses?.find((h) => h.number === 4);
+  const dsc = h7
+    ? {
+        longitude: h7.cusp_longitude,
+        sign: h7.sign,
+        degree_in_sign: h7.degree_in_sign,
+      }
+    : null;
+  const ic = h4
+    ? {
+        longitude: h4.cusp_longitude,
+        sign: h4.sign,
+        degree_in_sign: h4.degree_in_sign,
+      }
+    : null;
+  return { ...base, DSC: dsc, IC: ic };
+}
+
 function mapHouses(horoscope) {
   return horoscope.Houses.map((h) => {
     const lon = h.ChartPosition?.StartPosition?.Ecliptic?.DecimalDegrees;
@@ -290,6 +312,95 @@ function calculateChart(p) {
 }
 
 /**
+ * Soru anı (horary) haritası — doğum haritası değildir; doğum verisi kullanılmaz.
+ * Ephemeris UTC; yerel tarih-saat soru anının seçilen konum IANA dilimine çevrilir.
+ * Ev sistemi: Regiomontanus (circular-natal-horoscope-js).
+ *
+ * @param {{
+ *   question: string,
+ *   receivedAtUnix: number,
+ *   latitude: number,
+ *   longitude: number,
+ *   placeLabel: string,
+ *   timezoneIANA?: string|null,
+ * }} p
+ */
+function calculateHoraryChart(p) {
+  const { question, receivedAtUnix, latitude, longitude, placeLabel } = p;
+  let tz = p.timezoneIANA;
+  if (!tz || typeof tz !== 'string') {
+    try {
+      tz = tzLookup(latitude, longitude);
+    } catch {
+      tz = 'UTC';
+    }
+  }
+
+  const local = DateTime.fromSeconds(Number(receivedAtUnix), { zone: 'utc' }).setZone(tz);
+  const origin = new Origin({
+    year: local.year,
+    month: local.month - 1,
+    date: local.day,
+    hour: local.hour,
+    minute: local.minute,
+    second: local.second,
+    latitude,
+    longitude,
+  });
+
+  const horoscope = new Horoscope({
+    origin,
+    houseSystem: 'regiomontanus',
+    zodiac: 'tropical',
+    aspectPoints: ['bodies'],
+    aspectWithPoints: ['bodies'],
+    aspectTypes: ['major'],
+    language: 'en',
+  });
+
+  const chartMode = 'full';
+  const houses = mapHouses(horoscope);
+  const angles = mapAnglesWithDscIc(horoscope, houses);
+  const planets = PLANET_KEYS.map((k) => mapPlanetBody(k, horoscope, chartMode)).filter(Boolean);
+  const aspects = mapAspects(horoscope);
+  const themes = buildThemes(planets, chartMode);
+  const moon = planets.find((pl) => String(pl.id).toLowerCase() === 'moon') || null;
+
+  return {
+    schema_version: '1.1-horary',
+    chart_type: 'horary',
+    question: String(question || '').trim(),
+    received_at_utc: DateTime.fromSeconds(Number(receivedAtUnix), { zone: 'utc' }).toISO(),
+    location: {
+      place_label: String(placeLabel || '').trim(),
+      latitude,
+      longitude,
+      timezone: tz,
+    },
+    house_system: 'Regiomontanus',
+    angles,
+    houses,
+    planets,
+    aspects,
+    moon,
+    data_availability: {
+      horary_usable: true,
+      houses_usable: Boolean(houses && houses.length >= 12),
+      angles_usable: Boolean(angles && angles.ASC),
+    },
+    meta: {
+      house_system: 'Regiomontanus',
+      zodiac: 'Tropical',
+      ephemeris_note: 'circular-natal-horoscope-js',
+      computed_at: new Date().toISOString(),
+      timezone_note: origin.timezone?.name || tz,
+      horary_note: 'Horary: soru anı haritası; doğum verisi kullanılmadı.',
+    },
+    themes,
+  };
+}
+
+/**
  * Tarih metni: önce ISO yyyy-MM-dd, sonra dd.MM.yyyy, sonra Luxon locale tr "d MMMM yyyy".
  */
 function parseBirthDate(text) {
@@ -337,6 +448,7 @@ function parseBirthTime(text) {
 
 module.exports = {
   calculateChart,
+  calculateHoraryChart,
   parseBirthDate,
   parseBirthTime,
   PLANET_KEYS,

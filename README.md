@@ -2,7 +2,7 @@
 
 GitHub: [malibuqualista2021-cmd/telegram-astro-bot](https://github.com/malibuqualista2021-cmd/telegram-astro-bot)
 
-Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir. Kullanıcı doğal dilde yazar; niyet önce **Groq ile JSON sınıflandırması** (`classifyMessageAsync`) ile çözülür; riskli sıfırlama/güncelleme/transit/horary/doğum-saati-FAQ için kısa kural katmanı ve Groq hata/boş yanıtta **keyword yedeği** devreye girer. Genel kavramlarda **`astroKnowledgeService`** sözlüğü + gerekirse Groq kullanılır.
+Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, doğum için Placidus) ile hesaplar; **horary (soru anı)** için aynı kütüphane ile **Regiomontanus** evleri kullanılır (doğum verisi istenmez; soru anı + konum). Metin yorumunu **Groq** (Llama) ile üretir. Niyet **Groq JSON sınıflandırması** + kural katmanı + keyword yedeği ile çözülür. Genel kavramlarda **`astroKnowledgeService`** sözlüğü + gerekirse Groq kullanılır.
 
 ## Gereksinimler
 

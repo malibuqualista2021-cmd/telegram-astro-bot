@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --check index.js && node --check config/env.js && node --check services/logger.js && node --check services/chartCalculator.js && node --check services/interpretationService.js && node --check services/sessionStore.js && node --check services/messageClassifier.js && node --check services/sanitizeTurkishText.js && node --check services/astroKnowledgeService.js && node --check services/userProfileStore.js"
+    "test": "node --check index.js && node --check config/env.js && node --check services/logger.js && node --check services/chartCalculator.js && node --check services/interpretationService.js && node --check services/sessionStore.js && node --check services/messageClassifier.js && node --check services/sanitizeTurkishText.js && node --check services/horaryRules.js && node --check services/horaryService.js && node --check services/horaryPromptBuilder.js && node --check services/astroKnowledgeService.js && node --check services/userProfileStore.js"
   },
   "engines": {
     "node": ">=18"
@@ -17,6 +17,7 @@
     "express": "^4.21.0",
     "groq-sdk": "^1.2.0",
     "luxon": "^3.5.0",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "tz-lookup": "^6.1.25"
   }
 }

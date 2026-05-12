@@ -7,6 +7,7 @@ const Groq = require('groq-sdk');
 const logger = require('./logger');
 const astroKnowledgeService = require('./astroKnowledgeService');
 const { sanitizeAiOutputOrThrow } = require('./sanitizeTurkishText');
+const horaryPromptBuilder = require('./horaryPromptBuilder');
 
 const TOPIC_LABEL_TR = {
   general: 'Genel özet',
@@ -166,9 +167,36 @@ async function explainAstrologicalConcept(userQuestion, apiKey, model) {
   return astroKnowledgeService.answerGeneralConcept(userQuestion, apiKey, model);
 }
 
+async function generateHoraryInterpretation(horaryChartData, apiKey, model) {
+  logger.info('Groq: horary yorumu başladı', { model });
+  const client = buildGroqClient(apiKey);
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.42,
+      max_tokens: 1200,
+      messages: [
+        { role: 'system', content: horaryPromptBuilder.buildHorarySystemPrompt() },
+        { role: 'user', content: horaryPromptBuilder.buildHoraryUserPrompt(horaryChartData) },
+      ],
+    });
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) {
+      logger.warn('Groq: horary yanıtı boş');
+      throw new Error('EMPTY_HORARY_REPLY');
+    }
+    logger.info('Groq: horary yorumu bitti');
+    return sanitizeAiOutputOrThrow(raw, 'generateHoraryInterpretation');
+  } catch (e) {
+    logGroqError('Groq horary yorumu', e);
+    throw e;
+  }
+}
+
 module.exports = {
   generateInterpretation,
   answerPersonalQuestion,
   explainAstrologicalConcept,
+  generateHoraryInterpretation,
   TOPIC_LABEL_TR,
 };

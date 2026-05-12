@@ -10,6 +10,8 @@ const chartCalculator = require('./services/chartCalculator');
 const interpretationService = require('./services/interpretationService');
 const messageClassifier = require('./services/messageClassifier');
 const astroKnowledgeService = require('./services/astroKnowledgeService');
+const horaryService = require('./services/horaryService');
+const horaryRules = require('./services/horaryRules');
 
 const USER_SOFT_ERROR =
   'Şu an yorum hazırlanırken küçük bir sorun oluştu. Lütfen biraz sonra tekrar dene.';
@@ -20,8 +22,14 @@ const MSG_SANITIZE_FAIL =
 const MSG_UNSUPPORTED =
   'Transitler, günlük gökyüzü ve anlık gezegen konumları bu sürümde yok. Doğum haritan veya genel astroloji kavramlarında yardımcı olabilirim.';
 
-const MSG_HORARY =
-  'Horary (saatlik soru haritası) bu sürümde yok. Doğum haritan veya genel astroloji kavramlarında yardımcı olabilirim.';
+const MSG_HORARY_RESTRICTED =
+  'Bu konuda kesin hüküm vermem doğru olmaz. Horary’yi daha güvenli şekilde durumun dinamiğini, iletişimi veya karar sürecini anlamak için kullanabiliriz.';
+
+const MSG_HORARY_NEED_QUESTION =
+  'Horary için net bir soru yazman gerekiyor. Örneğin: “Bu ilişki olur mu?” veya “İşimde terfi alacak mıyım?” — doğum bilgisi istemiyorum.';
+
+const MSG_HORARY_ASK_PLACE =
+  'Bu soru için horary haritası çıkarabilmem adına bulunduğun şehri ve ülkeyi yazar mısın? Örn: Bursa, Türkiye';
 
 const MSG_RISKY_BOUNDARY =
   'Bu tarz konularda kesin hüküm veya kader dili kullanmıyorum. Astroloji burada farkındalık ve simgesel düşünce içindir; sağlık, hukuk ve finans için uzmanlara danışmalısın. İstersen genel bir kavramı sorabilir veya doğum bilgilerinle haritandan devam edebilirsin.';
@@ -46,6 +54,7 @@ const HELP_SNIPPET = [
   '— “Doğum haritama bak” veya “İlişki hayatım nasıl?”',
   '— “Kariyerimde ne öne çıkıyor?”',
   '— “7. ev nedir?” veya “Venüs kare Satürn nedir?”',
+  '— Horary (soru anı): “Bu ilişki olur mu?” + konum',
   '',
   'Komutlar: /help (tümü), /profile, /update_birth, /reset',
 ].join('\n');
@@ -580,8 +589,31 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
     return;
   }
 
-  if (cls.category === 'unsupported_horary') {
-    await ctx.reply(MSG_HORARY, kb);
+  if (cls.category === 'horary_question') {
+    if (horaryRules.isHoraryRestricted(text)) {
+      await ctx.reply(MSG_HORARY_RESTRICTED, kb);
+      return;
+    }
+    const receivedUnix = ctx.message?.date || Math.floor(Date.now() / 1000);
+    if (horaryRules.isHoraryKeywordOnlyMessage(text)) {
+      sessionStore.set(uid, {
+        ...sessionStore.get(uid),
+        step: 'await_horary_question',
+        horaryQuestionText: null,
+        horaryReceivedUnix: null,
+      });
+      logger.info(`Horary: soru bekleniyor user_id=${uid}`);
+      await ctx.reply(MSG_HORARY_NEED_QUESTION, kb);
+      return;
+    }
+    sessionStore.set(uid, {
+      ...sessionStore.get(uid),
+      step: 'await_horary_place',
+      horaryQuestionText: text.trim(),
+      horaryReceivedUnix: receivedUnix,
+    });
+    logger.info(`Horary: konum bekleniyor user_id=${uid}`);
+    await ctx.reply(MSG_HORARY_ASK_PLACE, kb);
     return;
   }
 
@@ -893,6 +925,97 @@ bot.on('text', async (ctx) => {
 
   if (step === 'await_intent') {
     await runIntentClassificationFlow(ctx, uid, s, text);
+    return;
+  }
+
+  if (step === 'await_horary_question') {
+    const qn = text.trim();
+    if (qn.length < 4) {
+      await ctx.reply('Soru biraz kısa kaldı; tam cümleyle yazar mısın?', Markup.removeKeyboard());
+      return;
+    }
+    if (horaryRules.isHoraryRestricted(qn)) {
+      await ctx.reply(MSG_HORARY_RESTRICTED, Markup.removeKeyboard());
+      sessionStore.set(uid, {
+        ...sessionStore.get(uid),
+        step: 'await_intent',
+        horaryQuestionText: null,
+        horaryReceivedUnix: null,
+      });
+      return;
+    }
+    const rx = ctx.message?.date || Math.floor(Date.now() / 1000);
+    sessionStore.set(uid, {
+      ...sessionStore.get(uid),
+      step: 'await_horary_place',
+      horaryQuestionText: qn,
+      horaryReceivedUnix: rx,
+    });
+    await ctx.reply(MSG_HORARY_ASK_PLACE, Markup.removeKeyboard());
+    return;
+  }
+
+  if (step === 'await_horary_place') {
+    const cur = sessionStore.get(uid);
+    const qtext = (cur.horaryQuestionText || '').trim();
+    const recv = cur.horaryReceivedUnix;
+    if (!qtext || recv == null) {
+      sessionStore.set(uid, {
+        ...sessionStore.get(uid),
+        step: 'await_intent',
+        horaryQuestionText: null,
+        horaryReceivedUnix: null,
+      });
+      await ctx.reply('Oturum verisi eksik; /start ile yeniden dene.', Markup.removeKeyboard());
+      return;
+    }
+    await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+    const geo = await geocodePlace(text);
+    if (!geo.ok) {
+      await ctx.reply(geo.error, Markup.removeKeyboard());
+      return;
+    }
+    let out;
+    try {
+      const chart = horaryService.buildHoraryChartForQuestion({
+        question: qtext,
+        receivedAtUnix: recv,
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        placeLabel: geo.label,
+        timezoneIANA: null,
+      });
+      out = await interpretationService.generateHoraryInterpretation(
+        chart,
+        env.GROQ_API_KEY,
+        env.GROQ_MODEL
+      );
+    } catch (e) {
+      if (isSanitizeDegradedError(e)) {
+        logger.warn(`Horary sanitize user_id=${uid}`);
+        await ctx.reply(MSG_SANITIZE_FAIL, Markup.removeKeyboard());
+      } else {
+        logger.error(`Horary yorum user_id=${uid}`, e);
+        await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
+      }
+      sessionStore.set(uid, {
+        ...sessionStore.get(uid),
+        step: 'await_intent',
+        horaryQuestionText: null,
+        horaryReceivedUnix: null,
+      });
+      return;
+    }
+    sessionStore.set(uid, {
+      ...sessionStore.get(uid),
+      step: 'await_intent',
+      horaryQuestionText: null,
+      horaryReceivedUnix: null,
+    });
+    for (const part of chunkTelegram(out)) {
+      await ctx.reply(part, Markup.removeKeyboard());
+    }
+    await ctx.reply('Başka bir sorun olursa yazabilirsin.', Markup.removeKeyboard());
     return;
   }
 

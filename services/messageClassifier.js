@@ -16,7 +16,7 @@ const VALID_INTENTS = [
   'update_birth_data',
   'reset_profile',
   'unsupported_transit',
-  'unsupported_horary',
+  'horary_question',
   'risky_question',
   'unclear_message',
 ];
@@ -27,6 +27,7 @@ const VALID_SAFE_RESPONSE = new Set([
   'ask_birth_data',
   'unsupported',
   'safety_redirect',
+  'horary_symbolic',
 ]);
 
 const INTENT_SYSTEM = `Sen bir Türkçe Telegram astroloji botunun niyet sınıflandırıcısısın.
@@ -37,7 +38,7 @@ Kullanıcı mesajını oku ve SADECE geçerli bir JSON nesnesi döndür (markdow
 - confidence: 0 ile 1 arası sayı (en iyi tahminin ne kadar net olduğu)
 - topic: kısa konu etiketi (birkaç kelime)
 - needs_birth_data: true veya false
-- safe_response_type: "general_info" | "personal_chart" | "ask_birth_data" | "unsupported" | "safety_redirect"
+- safe_response_type: "general_info" | "personal_chart" | "ask_birth_data" | "unsupported" | "safety_redirect" | "horary_symbolic"
 - personal_kind: "freeform" | "structured" | null
 - ambiguity: null veya "personal_vs_general"
 
@@ -50,11 +51,11 @@ Kurallar:
 - update_birth_data: doğum bilgisini yeniden girmek, haritayı güncellemek, tekrar girmek.
 - reset_profile: profili sil, hafızayı temizle, verileri sıfırla.
 - unsupported_transit: günlük gökyüzü, bugünkü transit, anlık gezegen konumu, günlük horoskop.
-- unsupported_horary: horary, saatlik soru haritası.
+- horary_question: soru anı haritası (horary), net evet/hayır veya sonuç sorusu, "horary yap", ilişki/iş/kayıp eşya vb. spesifik soru.
 - risky_question: kesin kader, kesin evlilik/ölüm, tıbbi/teşhis, yatırım tavsiyesi, kesin finans sonucu vb.
-- needs_birth_data: kişisel harita veya konu yorumu için doğum verisi gerekir mi (genel bilgi için false).
+- needs_birth_data: horary ve genel bilgi için false; doğum haritası için true.
 - personal_kind: "benim Venüsüm", "7. evim" gibi spesifik yerleşim → freeform; geniş konu başlığı → structured; kişisel değilse null.
-- safe_response_type: intent ile tutarlı olsun (risky → safety_redirect; transit/horary → unsupported; genel bilgi → general_info; kişisel harita → personal_chart veya ask_birth_data).
+- safe_response_type: intent ile tutarlı olsun (risky → safety_redirect; transit → unsupported; horary_question → horary_symbolic; genel bilgi → general_info; kişisel harita → personal_chart veya ask_birth_data).
 
 Yanıtın tek satır JSON olmalı.`;
 
@@ -79,7 +80,11 @@ const RESET_PROFILE_RE =
 const UPDATE_BIRTH_RE =
   /\b(yeniden|tekrar|baştan|bastan)\s*(doğum|dogum|harita).{0,18}(gir|yaz|ekle|girmek|gireceğim|girecegim)|(doğum|dogum|harita).{0,12}(yeniden|tekrar|güncelle|guncelle|değiştir|degistir)|haritam(ı|i)?\s*(yeniden|tekrar|baştan|bastan)|doğum\s*bilg(ilerimi|imi)\s*(güncelle|guncelle|değiştir|degistir|yenile)|güncelle\s*doğum|guncelle\s*dogum/i;
 
-const HORARY_RE = /\bhorary\b|horary\s*yap|saatlik\s*soru|horary\s*çek|horary\s*ceek/i;
+const HORARY_KEYWORD_RE =
+  /\bhorary\b|horary\s*yap|saatlik\s*soru|soru\s*anı\s*harita|soru\s*ani\s*harita|horary\s*çek|horary\s*ceek/i;
+
+const HORARY_QUESTION_HINT_RE =
+  /\b(olur\s*mu|olacak\s*mı|olacak\s*mi|alacak\s*mıyım|alacak\s*miyim|bulunur\s*mu|bulur\s*muyum|döner\s*mi|doner\s*mi|dönecek\s*mi|dönecek\s*mı|donecek\s*mi|anlaşma\s+olur|terfi\s+al|eşyamı\s+bul|kaybolan|bulur\s*mu)\b/i;
 
 const TRANSIT_RE =
   /transit|bugün\s*gökyüzü|gökyüzü\s*bugün|günlük\s*horoskop|günlük\s*yorum|ay\s*döngüsü|yeni\s*ay|dolunay|ephemeris|şu\s*an\s*gezegen|gezegen\s*konumları\s*şimdi|yarının\s*gökyüzü|bugünkü\s*gökyüzü|günlük\s*transit/i;
@@ -128,7 +133,6 @@ const GUARD_CATEGORIES = new Set([
   'risky_question',
   'reset_profile',
   'update_birth_data',
-  'unsupported_horary',
   'unsupported_transit',
 ]);
 
@@ -154,14 +158,20 @@ function classifyMessageFallback(rawText) {
   if (UPDATE_BIRTH_RE.test(rawText)) {
     return { category: 'update_birth_data', reason: 'user_update_birth_text' };
   }
-  if (HORARY_RE.test(rawText)) {
-    return { category: 'unsupported_horary', reason: 'horary' };
-  }
   if (TRANSIT_RE.test(rawText)) {
     return { category: 'unsupported_transit', reason: 'transit_or_daily' };
   }
   if (BIRTH_TIME_INFO_RE.test(rawText)) {
     return { category: 'general_astro_knowledge', reason: 'birth_time_faq' };
+  }
+
+  const horaryKeyword = HORARY_KEYWORD_RE.test(rawText);
+  const horaryShape = HORARY_QUESTION_HINT_RE.test(t) && /[?？]/.test(rawText);
+  if ((horaryKeyword || horaryShape) && !HARITA_READING_RE.test(t)) {
+    return {
+      category: 'horary_question',
+      reason: horaryKeyword ? 'horary_keyword' : 'horary_question_shape',
+    };
   }
 
   const hasPersonalBody = PERSONAL_BODY_RE.test(t);
@@ -241,6 +251,10 @@ function classifyMessageFallback(rawText) {
     return { category: 'general_astro_knowledge', reason: 'astro_topic' };
   }
 
+  if (/(sağlık|sağlığım|sağligim|saglik|sagligim)/i.test(rawText) && /[?？]/.test(rawText)) {
+    return { category: 'horary_question', reason: 'horary_health_question' };
+  }
+
   if (t.length <= 2 || UNCLEAR_GREETING_RE.test(t)) {
     return { category: 'unclear_message', reason: 'too_short_or_greeting' };
   }
@@ -293,6 +307,7 @@ function parseGroqJsonContent(content) {
 function normalizeGroqPayload(obj, rawUserText) {
   if (!obj || typeof obj !== 'object') return null;
   let intent = String(obj.intent || '').trim();
+  if (intent === 'unsupported_horary') intent = 'horary_question';
   if (!VALID_INTENTS.includes(intent)) intent = 'unclear_message';
 
   let conf = Number(obj.confidence);
@@ -310,17 +325,23 @@ function normalizeGroqPayload(obj, rawUserText) {
     safeType =
       intent === 'risky_question'
         ? 'safety_redirect'
-        : intent === 'unsupported_transit' || intent === 'unsupported_horary'
+        : intent === 'unsupported_transit'
           ? 'unsupported'
-          : intent.startsWith('personal')
-            ? 'personal_chart'
-            : 'general_info';
+          : intent === 'horary_question'
+            ? 'horary_symbolic'
+            : intent.startsWith('personal')
+              ? 'personal_chart'
+              : 'general_info';
   }
 
   let personalKind = obj.personal_kind;
   if (personalKind !== 'freeform' && personalKind !== 'structured') personalKind = null;
 
   const ambiguity = obj.ambiguity === 'personal_vs_general' ? 'personal_vs_general' : null;
+
+  if (intent === 'horary_question') {
+    needsBirth = false;
+  }
 
   if (
     intent === 'personal_chart_reading' ||
