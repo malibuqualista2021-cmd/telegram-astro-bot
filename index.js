@@ -14,6 +14,9 @@ const astroKnowledgeService = require('./services/astroKnowledgeService');
 const USER_SOFT_ERROR =
   'Şu an yorum hazırlanırken küçük bir sorun oluştu. Lütfen biraz sonra tekrar dene.';
 
+const MSG_SANITIZE_FAIL =
+  'Yanıt hazırlanırken metin formatında küçük bir sorun oluştu. Lütfen tekrar dener misin?';
+
 const MSG_UNSUPPORTED =
   'Transitler, günlük gökyüzü ve anlık gezegen konumları bu sürümde yok. Doğum haritan veya genel astroloji kavramlarında yardımcı olabilirim.';
 
@@ -190,6 +193,10 @@ function resolveChartForUser(uid, session) {
   return { chart: null, usedSavedProfile: false };
 }
 
+function isSanitizeDegradedError(e) {
+  return Boolean(e && (e.code === 'SANITIZE_DEGRADED' || e.message === 'SANITIZE_DEGRADED'));
+}
+
 function chunkTelegram(text, maxLen = 4000) {
   const t = String(text || '');
   if (t.length <= maxLen) return [t];
@@ -363,6 +370,11 @@ async function deliverChartReading(ctx, uid, s, topicCode) {
       env.GROQ_MODEL
     );
   } catch (e) {
+    if (isSanitizeDegradedError(e)) {
+      logger.warn(`Groq harita yorumu sanitize user_id=${uid}`);
+      await ctx.reply(MSG_SANITIZE_FAIL, Markup.removeKeyboard());
+      return;
+    }
     logger.error(`Groq harita yorumu user_id=${uid}`, e);
     await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
     sessionStore.reset(uid);
@@ -422,6 +434,11 @@ async function deliverChartReadingFreeform(ctx, uid, s) {
       env.GROQ_MODEL
     );
   } catch (e) {
+    if (isSanitizeDegradedError(e)) {
+      logger.warn(`Groq kişisel soru (serbest) sanitize user_id=${uid}`);
+      await ctx.reply(MSG_SANITIZE_FAIL, Markup.removeKeyboard());
+      return;
+    }
     logger.error(`Groq kişisel soru user_id=${uid}`, e);
     await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
     sessionStore.reset(uid);
@@ -625,6 +642,11 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
         await ctx.reply(part);
       }
     } catch (e) {
+      if (isSanitizeDegradedError(e)) {
+        logger.warn(`Genel sohbet sanitize user_id=${uid}`);
+        await ctx.reply(MSG_SANITIZE_FAIL, kb);
+        return;
+      }
       logger.error(`Genel sohbet Groq user_id=${uid}`, e);
       await ctx.reply(USER_SOFT_ERROR, kb);
       return;
@@ -664,6 +686,11 @@ async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
             await ctx.reply(part);
           }
         } catch (e) {
+          if (isSanitizeDegradedError(e)) {
+            logger.warn(`Kişisel yorum sanitize user_id=${uid}`);
+            await ctx.reply(MSG_SANITIZE_FAIL, kb);
+            return;
+          }
           logger.error(`Kişisel yorum hatası user_id=${uid}`, e);
           await ctx.reply(USER_SOFT_ERROR, kb);
         }
@@ -889,6 +916,13 @@ bot.on('text', async (ctx) => {
         env.GROQ_MODEL
       );
     } catch (e) {
+      if (isSanitizeDegradedError(e)) {
+        logger.warn(`Genel kavram sanitize user_id=${uid}`);
+        sessionStore.reset(uid);
+        sessionStore.set(uid, { step: 'await_intent', lastChartData: preservedChart || null });
+        await ctx.reply(MSG_SANITIZE_FAIL, Markup.removeKeyboard());
+        return;
+      }
       logger.error(`Genel kavram hatası user_id=${uid}`, e);
       await ctx.reply(USER_SOFT_ERROR);
       sessionStore.reset(uid);

@@ -5,6 +5,7 @@
 
 const Groq = require('groq-sdk');
 const logger = require('./logger');
+const { sanitizeTurkishText, sanitizeAiOutputOrThrow } = require('./sanitizeTurkishText');
 
 const CHART_NOTE =
   'Kendi haritanda bu temanın nasıl işlediğini görmek için doğum tarihi, yer ve mümkünse saat gerekir.';
@@ -492,6 +493,11 @@ function buildGeneralSystemPrompt() {
     'Kesin kehanet, sağlık tanısı, yatırım tavsiyesi, kesin evlilik/ayrılık/para kaybı verme.',
     'Markdown kullanma; düz metin.',
     '',
+    'Dil ve karakterler:',
+    'Yanıtlarını yalnızca Türkçe yaz; sadece Türkçe Latin alfabesi kullan (ç, ğ, ı, İ, ö, ş, ü dahil).',
+    'Kiril, Yunanca, Arapça, özel sembol veya bozuk Unicode kullanma.',
+    'Latin harfine benzeyen Kiril harfleri (ör. а, е, о, р, с, у, х) asla kullanma.',
+    '',
     'SÖZLÜK:',
     buildCompactGlossaryForPrompt(),
     '',
@@ -531,7 +537,7 @@ async function answerGeneralConcept(userQuestion, apiKey, model) {
 
     if (strong || h0.kind === 'sign' || h0.kind === 'element' || h0.kind === 'quality' || h0.kind === 'technique') {
       logger.info('Genel kavram: sözlük katmanı (deterministik) kullanıldı', { keys: hits.map((h) => h.id) });
-      return local;
+      return sanitizeTurkishText(local);
     }
   }
 
@@ -556,7 +562,7 @@ async function answerGeneralConcept(userQuestion, apiKey, model) {
       throw new Error('EMPTY_REPLY');
     }
     logger.info('Groq: genel kavram bitti');
-    return text;
+    return sanitizeAiOutputOrThrow(text, 'answerGeneralConcept');
   } catch (e) {
     logGroqErr('Genel kavram', e);
     throw e;

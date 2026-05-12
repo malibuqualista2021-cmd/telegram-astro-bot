@@ -6,6 +6,7 @@
 const Groq = require('groq-sdk');
 const logger = require('./logger');
 const astroKnowledgeService = require('./astroKnowledgeService');
+const { sanitizeAiOutputOrThrow } = require('./sanitizeTurkishText');
 
 const TOPIC_LABEL_TR = {
   general: 'Genel özet',
@@ -39,6 +40,10 @@ function buildSystemPrompt() {
     'Kesin kehanet, sağlık tanısı, yatırım tavsiyesi, ilişkinin biteceği gibi kesin hüküm verme.',
     '"Kesin olacak", "kaderin bu", "bu ilişki biter", "para kaybedeceksin" gibi ifadeleri kullanma.',
     'Türkçe, sade, samimi ve kısa yaz.',
+    'Yanıtlarını yalnızca Türkçe yaz; sadece Türkçe Latin alfabesi kullan (ç, ğ, ı, İ, ö, ş, ü dahil).',
+    'Kiril, Yunanca, Arapça, özel sembol veya bozuk Unicode kullanma.',
+    'Latin harfine benzeyen Kiril harfleri (ör. а, е, о, р, с, у, х) asla kullanma; her zaman doğru Latin harfleri kullan.',
+    'Çıktı temiz, okunabilir ve Telegram uyumlu olsun.',
     'Markdown veya özel biçim kullanma; düz metin, kısa başlık satırları için başında tire veya numara kullanabilirsin.',
     '',
     'Yanıtın bölümleri (bu sırayla, kısa tut):',
@@ -60,6 +65,9 @@ function buildPersonalQuestionPrompt() {
     'chartData içinde listelenmeyen gezegen açısı veya ev konumu hakkında “var/yok/kare” gibi kesin iddia kullanma.',
     'Kesin kader, sağlık tanısı, yatırım tavsiyesi, ilişki kesinliği verme.',
     'Türkçe, sade, samimi ve kısa.',
+    'Yanıtlarını yalnızca Türkçe yaz; sadece Türkçe Latin alfabesi kullan (ç, ğ, ı, İ, ö, ş, ü dahil).',
+    'Kiril, Yunanca, Arapça, özel sembol veya bozuk Unicode kullanma.',
+    'Latin harfine benzeyen Kiril harfleri (ör. а, е, о, р, с, у, х) asla kullanma.',
     'Markdown kullanma; düz metin.',
     '',
     'Yanıt yapısı:',
@@ -99,7 +107,7 @@ async function answerPersonalQuestion(chartData, userQuestion, apiKey, model) {
       throw new Error('EMPTY_PERSONAL_REPLY');
     }
     logger.info('Groq: kişisel serbest soru bitti');
-    return text;
+    return sanitizeAiOutputOrThrow(text, 'answerPersonalQuestion');
   } catch (e) {
     logGroqError('Groq kişisel soru', e);
     throw e;
@@ -147,7 +155,7 @@ async function generateInterpretation(chartData, apiKey, model) {
       throw new Error('EMPTY_INTERPRETATION');
     }
     logger.info('Groq: harita yorumu bitti');
-    return text;
+    return sanitizeAiOutputOrThrow(text, 'generateInterpretation');
   } catch (e) {
     logGroqError('Groq harita yorumu', e);
     throw e;
