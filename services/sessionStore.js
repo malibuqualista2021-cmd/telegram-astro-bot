@@ -9,6 +9,8 @@ function defaultSession() {
     step: 'idle',
     intent: null,
     topicCodePreset: null,
+    pendingFreeformPersonal: null,
+    lastChartData: null,
     birthDateText: null,
     birthYmd: null,
     placeText: null,
@@ -40,4 +42,23 @@ function reset(userId) {
   sessions.set(String(userId), defaultSession());
 }
 
-module.exports = { get, set, reset, defaultSession };
+/**
+ * Doğum verisini temizler, son haritayı saklar, sohbet menüsüne döner.
+ */
+function prepareForNextChat(userId, chartData) {
+  let snapshot = null;
+  try {
+    snapshot = JSON.parse(JSON.stringify(chartData));
+  } catch {
+    snapshot = chartData;
+  }
+  if (snapshot && typeof snapshot === 'object') {
+    delete snapshot.interpretation_request;
+  }
+  const base = defaultSession();
+  base.step = 'await_intent';
+  base.lastChartData = snapshot;
+  sessions.set(String(userId), base);
+}
+
+module.exports = { get, set, reset, defaultSession, prepareForNextChat };

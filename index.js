@@ -7,9 +7,20 @@ const logger = require('./services/logger');
 const sessionStore = require('./services/sessionStore');
 const chartCalculator = require('./services/chartCalculator');
 const interpretationService = require('./services/interpretationService');
+const messageClassifier = require('./services/messageClassifier');
+const astroKnowledgeService = require('./services/astroKnowledgeService');
 
 const USER_SOFT_ERROR =
   'Şu an yorum hazırlanırken küçük bir sorun oluştu. Lütfen biraz sonra tekrar dene.';
+
+const MSG_UNSUPPORTED =
+  'Bu özellik yakında eklenecek. Şimdilik doğum haritası ve astrolojik kavramlar üzerinden yardımcı olabilirim.';
+
+const MSG_RISKY_BOUNDARY =
+  'Bu tarz konularda kesin hüküm veya kader dili kullanmıyorum. Astroloji burada farkındalık ve simgesel düşünce içindir; sağlık, hukuk ve finans için uzmanlara danışmalısın. İstersen genel bir kavramı sorabilir veya doğum bilgilerinle haritandan devam edebilirsin.';
+
+const MSG_BIRTH_TIME_FAQ =
+  'Saati bilmiyorsan sorun değil: haritayı kısmi modda hesaplarım (yükselen ve ev yerleşimleri olmadan). Tarih ve yer net olsa bile Güneş, Ay ve gezegen burçlarına göre kişisel bir özet çıkarabilirim. Menüden "1" ile akışa girebilir veya doğum adımlarında saat sorulunca "bilmiyorum" yazabilirsin.';
 
 const GEOCODE_UA =
   env.GEOCODE_USER_AGENT || 'TelegramAstroMVP/1.0 (https://github.com/)';
@@ -17,6 +28,8 @@ const GEOCODE_UA =
 const START_INTRO = [
   'Merhaba, ben kişisel astroloji asistanın.',
   'Doğum haritanı yorumlayabilir, haritan üzerinden bir konuyu inceleyebilir veya astrolojik bir kavramı sade şekilde açıklayabilirim.',
+  '',
+  'İstersen menüden seç, istersen doğrudan soru da yazabilirsin.',
   '',
   'Nasıl ilerleyelim?',
   '',
@@ -112,6 +125,7 @@ async function geocodePlace(query) {
   };
 }
 
+/** Menü 1–4 eşlemesi; eşleşmezse { ok: false } */
 function parseMainIntent(text) {
   const raw = (text || '').trim();
   const m = raw.match(/^([1-4])\b/);
@@ -131,10 +145,7 @@ function parseMainIntent(text) {
     return { ok: true, n: 4 };
   }
 
-  return {
-    ok: false,
-    error: 'Lütfen 1–4 arasında bir seçenek yaz veya alttaki düğmelerden birine bas.',
-  };
+  return { ok: false };
 }
 
 function parseTopicCode(text) {
@@ -207,7 +218,7 @@ async function deliverChartReading(ctx, uid, s, topicCode) {
       env.GROQ_MODEL
     );
   } catch (e) {
-    logger.error(`AI yorum hatası user_id=${uid}`, e);
+    logger.error(`Groq harita yorumu user_id=${uid}`, e);
     await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
     sessionStore.reset(uid);
     return;
@@ -219,8 +230,66 @@ async function deliverChartReading(ctx, uid, s, topicCode) {
     else await ctx.reply(parts[i]);
   }
 
-  sessionStore.reset(uid);
-  await ctx.reply('Yeni bir yorum için /start yazman yeterli.');
+  sessionStore.prepareForNextChat(uid, chartData);
+  await ctx.reply('Sormaya devam edebilir veya menüden yeni bir akış seçebilirsin.', intentMenuKeyboard);
+}
+
+async function deliverChartReadingFreeform(ctx, uid, s) {
+  await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+
+  let chartData;
+  try {
+    logger.info(`Harita hesaplama başladı (serbest soru) user_id=${uid}`);
+    chartData = chartCalculator.calculateChart({
+      year: s.birthYmd.year,
+      month: s.birthYmd.month,
+      day: s.birthYmd.day,
+      hour: s.birthHour,
+      minute: s.birthMinute,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      hasKnownBirthTime: s.hasKnownBirthTime,
+      placeLabel: s.placeLabel,
+    });
+    logger.info(`Harita hesaplama bitti (serbest soru) user_id=${uid}`);
+  } catch (e) {
+    logger.error(`Harita hesaplama hatası (serbest) user_id=${uid}`, e);
+    await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
+    sessionStore.reset(uid);
+    return;
+  }
+
+  if (!chartData.planets || chartData.planets.length < 10) {
+    logger.warn(`Harita verisi eksik (serbest) user_id=${uid}`);
+    await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
+    sessionStore.reset(uid);
+    return;
+  }
+
+  const q = s.pendingFreeformPersonal || '';
+  let interpretation;
+  try {
+    interpretation = await interpretationService.answerPersonalQuestion(
+      chartData,
+      q,
+      env.GROQ_API_KEY,
+      env.GROQ_MODEL
+    );
+  } catch (e) {
+    logger.error(`Groq kişisel soru user_id=${uid}`, e);
+    await ctx.reply(USER_SOFT_ERROR, Markup.removeKeyboard());
+    sessionStore.reset(uid);
+    return;
+  }
+
+  const parts = chunkTelegram(interpretation);
+  for (let i = 0; i < parts.length; i++) {
+    if (i === 0) await ctx.reply(parts[i], Markup.removeKeyboard());
+    else await ctx.reply(parts[i]);
+  }
+
+  sessionStore.prepareForNextChat(uid, chartData);
+  await ctx.reply('Başka bir sorun olursa yazabilirsin; menü aşağıda.', intentMenuKeyboard);
 }
 
 bot.start(async (ctx) => {
@@ -234,11 +303,11 @@ bot.command('help', async (ctx) => {
   await ctx.reply(
     [
       'Komutlar:',
-      '/start — ana menüden nasıl devam edeceğini seçersin.',
+      '/start — menüyü ve sohbeti sıfırlar.',
       '/help — bu mesaj',
       '',
-      'Doğum haritası yorumu için verdiğin doğum bilgileriyle hesaplanan haritaya dayanır; genel burç metni değildir.',
-      'Kavram seçeneğinde kişisel harita kullanılmaz, yalnızca genel bilgi verilir.',
+      'Menüden seçebilir veya doğrudan astroloji sorusu yazabilirsin.',
+      'Kişisel yorum için doğum bilgisi ve hesaplanmış harita gerekir; kavram sorularında genel bilgi verilir.',
     ].join('\n')
   );
 });
@@ -258,50 +327,130 @@ bot.on('text', async (ctx) => {
 
   if (step === 'await_intent') {
     const pi = parseMainIntent(text);
-    if (!pi.ok) {
-      await ctx.reply(pi.error, intentMenuKeyboard);
+    if (pi.ok) {
+      if (pi.n === 1) {
+        sessionStore.set(uid, {
+          step: 'await_date',
+          intent: 'chart',
+          topicCodePreset: null,
+          pendingFreeformPersonal: null,
+        });
+        logger.info(`Niyet:1 harita yorumu user_id=${uid}`);
+        await ctx.reply(
+          'Tamam. Kişisel harita için doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
+          Markup.removeKeyboard()
+        );
+        return;
+      }
+      if (pi.n === 2) {
+        sessionStore.set(uid, {
+          step: 'await_topic_preset',
+          intent: 'chart_topic_first',
+          topicCodePreset: null,
+          pendingFreeformPersonal: null,
+        });
+        logger.info(`Niyet:2 önce konu user_id=${uid}`);
+        await ctx.reply(
+          'Önce hangi temada haritandan ilerleyelim? Aşağıdan seç veya 1–5 yaz:',
+          topicKeyboard
+        );
+        return;
+      }
+      if (pi.n === 3) {
+        sessionStore.set(uid, { step: 'await_concept', intent: 'concept' });
+        logger.info(`Niyet:3 kavram user_id=${uid}`);
+        await ctx.reply(
+          'Merak ettiğin kavramı veya terimi kısaca yaz. Örnek: "Yükselen burç nedir?", "Satürn retrosu ne anlama gelir?"',
+          Markup.removeKeyboard()
+        );
+        return;
+      }
+      if (pi.n === 4) {
+        logger.info(`Niyet:4 yakında user_id=${uid}`);
+        await ctx.reply('Bu özellik yakında eklenecek.', intentMenuKeyboard);
+        return;
+      }
+    }
+
+    const cls = messageClassifier.classifyMessage(text);
+    logger.info(`Sınıflandırma user_id=${uid} category=${cls.category} reason=${cls.reason}`);
+
+    if (cls.category === 'D') {
+      await ctx.reply(MSG_RISKY_BOUNDARY, intentMenuKeyboard);
       return;
     }
-    if (pi.n === 1) {
+    if (cls.category === 'C') {
+      await ctx.reply(MSG_UNSUPPORTED, intentMenuKeyboard);
+      return;
+    }
+    if (cls.category === 'B') {
+      if (s.lastChartData) {
+        await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+        try {
+          const ans = await interpretationService.answerPersonalQuestion(
+            s.lastChartData,
+            text,
+            env.GROQ_API_KEY,
+            env.GROQ_MODEL
+          );
+          for (const part of chunkTelegram(ans)) {
+            await ctx.reply(part);
+          }
+        } catch (e) {
+          logger.error(`Serbest kişisel yorum hatası user_id=${uid}`, e);
+          await ctx.reply(USER_SOFT_ERROR, intentMenuKeyboard);
+        }
+        await ctx.reply('Sormaya devam edebilirsin.', intentMenuKeyboard);
+        return;
+      }
       sessionStore.set(uid, {
+        ...sessionStore.get(uid),
         step: 'await_date',
-        intent: 'chart',
+        intent: 'freeform_personal',
+        pendingFreeformPersonal: text,
         topicCodePreset: null,
+        lastChartData: null,
+        birthYmd: null,
+        birthDateText: null,
+        placeText: null,
+        placeLabel: null,
+        latitude: null,
+        longitude: null,
+        birthTimeText: null,
+        birthHour: null,
+        birthMinute: null,
+        hasKnownBirthTime: null,
       });
-      logger.info(`Niyet:1 harita yorumu user_id=${uid}`);
+      logger.info(`Serbest kişisel soru -> doğum toplama user_id=${uid}`);
       await ctx.reply(
-        'Tamam. Kişisel harita için doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
+        'Kişisel bakabilmem için doğum bilgilerine ihtiyacım var. Doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
         Markup.removeKeyboard()
       );
       return;
     }
-    if (pi.n === 2) {
-      sessionStore.set(uid, {
-        step: 'await_topic_preset',
-        intent: 'chart_topic_first',
-        topicCodePreset: null,
-      });
-      logger.info(`Niyet:2 önce konu user_id=${uid}`);
-      await ctx.reply(
-        'Önce hangi temada haritandan ilerleyelim? Aşağıdan seç veya 1–5 yaz:',
-        topicKeyboard
+
+    if (cls.category === 'A' && cls.reason === 'birth_time_faq') {
+      await ctx.reply(MSG_BIRTH_TIME_FAQ, intentMenuKeyboard);
+      return;
+    }
+
+    await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+    try {
+      const out = await astroKnowledgeService.answerGeneralConcept(
+        text,
+        env.GROQ_API_KEY,
+        env.GROQ_MODEL
       );
+      for (const part of chunkTelegram(out)) {
+        await ctx.reply(part);
+      }
+    } catch (e) {
+      logger.error(`Genel sohbet Groq user_id=${uid}`, e);
+      await ctx.reply(USER_SOFT_ERROR, intentMenuKeyboard);
       return;
     }
-    if (pi.n === 3) {
-      sessionStore.set(uid, { step: 'await_concept', intent: 'concept' });
-      logger.info(`Niyet:3 kavram user_id=${uid}`);
-      await ctx.reply(
-        'Merak ettiğin kavramı veya terimi kısaca yaz. Örnek: "Yükselen burç nedir?", "Satürn retrosu ne anlama gelir?"',
-        Markup.removeKeyboard()
-      );
-      return;
-    }
-    if (pi.n === 4) {
-      logger.info(`Niyet:4 yakında user_id=${uid}`);
-      await ctx.reply('Bu özellik yakında eklenecek.', intentMenuKeyboard);
-      return;
-    }
+    await ctx.reply('Başka sorun olursa yaz; menü hâlâ geçerli.', intentMenuKeyboard);
+    return;
   }
 
   if (step === 'await_topic_preset') {
@@ -314,6 +463,7 @@ bot.on('text', async (ctx) => {
       ...s,
       step: 'await_date',
       topicCodePreset: tp.code,
+      pendingFreeformPersonal: null,
     });
     logger.info(`Ön seçilen konu topic=${tp.code} user_id=${uid}`);
     await ctx.reply(
@@ -329,6 +479,7 @@ bot.on('text', async (ctx) => {
       return;
     }
     await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+    const preservedChart = sessionStore.get(uid).lastChartData;
     let out;
     try {
       out = await interpretationService.explainAstrologicalConcept(
@@ -340,7 +491,7 @@ bot.on('text', async (ctx) => {
       logger.error(`Genel kavram hatası user_id=${uid}`, e);
       await ctx.reply(USER_SOFT_ERROR);
       sessionStore.reset(uid);
-      sessionStore.set(uid, { step: 'await_intent' });
+      sessionStore.set(uid, { step: 'await_intent', lastChartData: preservedChart || null });
       await ctx.reply(START_INTRO, intentMenuKeyboard);
       return;
     }
@@ -349,9 +500,9 @@ bot.on('text', async (ctx) => {
       await ctx.reply(part);
     }
     sessionStore.reset(uid);
-    sessionStore.set(uid, { step: 'await_intent' });
+    sessionStore.set(uid, { step: 'await_intent', lastChartData: preservedChart || null });
     logger.info(`Genel kavram yanıtı gönderildi user_id=${uid}`);
-    await ctx.reply('Başka bir şey için menüden seçebilirsin:', intentMenuKeyboard);
+    await ctx.reply('Başka bir şey için menüden seçebilir veya soru yazabilirsin:', intentMenuKeyboard);
     return;
   }
 
@@ -419,8 +570,14 @@ bot.on('text', async (ctx) => {
       : 'Saat bilinmiyor: kısmi harita modu (yükselen ve ev yok; öğle saati varsayımıyla gezegen burçları ve açılar hesaplandı).';
 
     logger.info(
-      `Veri toplama: doğum saati user_id=${uid} has_time=${hasKnownBirthTime} preset_topic=${full.topicCodePreset || 'none'}`
+      `Veri toplama: doğum saati user_id=${uid} has_time=${hasKnownBirthTime} preset_topic=${full.topicCodePreset || 'none'} freeform=${Boolean(full.pendingFreeformPersonal)}`
     );
+
+    if (full.pendingFreeformPersonal) {
+      await ctx.reply(modeMsg);
+      await deliverChartReadingFreeform(ctx, uid, full);
+      return;
+    }
 
     if (full.topicCodePreset) {
       await ctx.reply(modeMsg);

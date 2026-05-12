@@ -5,6 +5,7 @@
 
 const Groq = require('groq-sdk');
 const logger = require('./logger');
+const astroKnowledgeService = require('./astroKnowledgeService');
 
 const TOPIC_LABEL_TR = {
   general: 'Genel özet',
@@ -49,15 +50,59 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
-function buildConceptSystemPrompt() {
+function buildPersonalQuestionPrompt() {
   return [
-    'Sen bir astroloji eğitmenisin. Kullanıcı bir kavram veya terim soruyor.',
-    'Yalnızca genel, bilgilendirici ve sade Türkçe ile açıkla; doğum haritası veya kişisel yorum yapma.',
-    '"Senin haritanda", "sana göre", burçları kişiselleştirerek anlatma.',
-    'Klasik falcı veya aşırı mistik dil kullanma; modern ve güven veren bir ton kullan.',
-    'Kısa tut (birkaç paragraf). Kesin kehanet, sağlık, yatırım veya ilişki garantisi verme.',
+    'Sen doğum haritası yorum asistanısın. Kullanıcının sorusuna YALNIZCA verilen JSON (chartData) ile cevap ver.',
+    'chartData dışına çıkma; gezegen, yükselen, ev veya açı UYDURMA.',
+    'chart_mode "partial" veya data_availability ile yükselen/ev kapalıysa bunlar hakkında yorum yapma.',
+    'En az 2–3 somut harita öğesine bağlan (ör. Güneş+Ay+Venüs burcu, veya JSON\'daki bir açı; yalnızca veride varsa).',
+    'Genel "X burcu şöyledir" cümleleri kullanma; her cümleyi bu haritaya bağla.',
+    'Kesin kader, sağlık tanısı, yatırım tavsiyesi, ilişki kesinliği verme.',
+    'Türkçe, sade, samimi ve kısa.',
     'Markdown kullanma; düz metin.',
+    '',
+    'Yanıt yapısı:',
+    '1) Kullanıcı sorusuna bir cümlelik doğrudan giriş.',
+    '2) Haritadan destekleyen 2–4 kısa madde (somut etiket: gezegen+burç veya açı; tam modda ev mümkünse).',
+    '3) Bir pratik davranış önerisi (kesin sonuç iddiası yok).',
+    '4) Tek cümlelik hatırlatma: eğlence/farkındalık; uzman yerine geçmez.',
   ].join('\n');
+}
+
+async function answerPersonalQuestion(chartData, userQuestion, apiKey, model) {
+  const q = String(userQuestion || '').trim();
+  if (q.length < 2) throw new Error('QUESTION_TOO_SHORT');
+
+  logger.info('Groq: kişisel serbest soru başladı', { model });
+
+  const client = buildGroqClient(apiKey);
+  const payload = JSON.stringify(chartData, null, 2);
+
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.55,
+      max_tokens: 900,
+      messages: [
+        { role: 'system', content: buildPersonalQuestionPrompt() },
+        {
+          role: 'user',
+          content: `Kullanıcı sorusu:\n${q}\n\nchartData (JSON):\n${payload}`,
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) {
+      logger.warn('Groq: kişisel soru yanıtı boş');
+      throw new Error('EMPTY_PERSONAL_REPLY');
+    }
+    logger.info('Groq: kişisel serbest soru bitti');
+    return text;
+  } catch (e) {
+    logGroqError('Groq kişisel soru', e);
+    throw e;
+  }
 }
 
 async function generateInterpretation(chartData, apiKey, model) {
@@ -108,48 +153,13 @@ async function generateInterpretation(chartData, apiKey, model) {
   }
 }
 
-/**
- * Kişisel harita olmadan yalnızca genel kavram açıklaması (Groq).
- */
 async function explainAstrologicalConcept(userQuestion, apiKey, model) {
-  const q = (userQuestion || '').trim();
-  if (q.length < 2) {
-    throw new Error('QUESTION_TOO_SHORT');
-  }
-
-  logger.info('Groq: genel kavram açıklaması başladı', { model });
-
-  const client = buildGroqClient(apiKey);
-
-  try {
-    const completion = await client.chat.completions.create({
-      model,
-      temperature: 0.55,
-      max_tokens: 550,
-      messages: [
-        { role: 'system', content: buildConceptSystemPrompt() },
-        {
-          role: 'user',
-          content: `Kullanıcının sorusu (yalnızca genel açıklama ver, kişisel harita yok):\n${q}`,
-        },
-      ],
-    });
-
-    const text = completion.choices[0]?.message?.content?.trim();
-    if (!text) {
-      logger.warn('Groq: genel kavram yanıtı boş');
-      throw new Error('EMPTY_CONCEPT_REPLY');
-    }
-    logger.info('Groq: genel kavram açıklaması bitti');
-    return text;
-  } catch (e) {
-    logGroqError('Groq genel kavram', e);
-    throw e;
-  }
+  return astroKnowledgeService.answerGeneralConcept(userQuestion, apiKey, model);
 }
 
 module.exports = {
   generateInterpretation,
+  answerPersonalQuestion,
   explainAstrologicalConcept,
   TOPIC_LABEL_TR,
 };

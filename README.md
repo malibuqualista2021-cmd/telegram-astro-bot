@@ -2,7 +2,7 @@
 
 GitHub: [malibuqualista2021-cmd/telegram-astro-bot](https://github.com/malibuqualista2021-cmd/telegram-astro-bot)
 
-Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir.
+Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir. `/start` sonrası menüye ek olarak **serbest astroloji sorusu** yazılabilir: mesaj önce sınıflandırılır (genel kavram / kişisel harita / transit–MVP dışı / riskli sınır).
 
 ## Gereksinimler
 
@@ -52,8 +52,10 @@ npm start
 | `index.js` | Express + Telegraf akışı, hata yakalama |
 | `services/logger.js` | Yapılandırılmış konsol logları |
 | `services/chartCalculator.js` | Harita hesaplama (LLM yapmaz) |
-| `services/interpretationService.js` | Groq ile yorum / kavram metni |
-| `services/sessionStore.js` | Bellek içi oturum |
+| `services/interpretationService.js` | Groq: konu yorumu, serbest kişisel soru, kavram (astroKnowledge’e delege) |
+| `services/astroKnowledgeService.js` | Genel kavram cevapları (harita yok) |
+| `services/messageClassifier.js` | Serbest metin A/B/C/D sınıflandırması |
+| `services/sessionStore.js` | Bellek içi oturum; son harita `lastChartData` ile sohbet |
 
 ## Notlar (MVP)
 
