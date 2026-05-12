@@ -1,5 +1,7 @@
 # Telegram doğum haritası botu (MVP)
 
+GitHub: [malibuqualista2021-cmd/telegram-astro-bot](https://github.com/malibuqualista2021-cmd/telegram-astro-bot)
+
 Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; ardından **OpenAI** ile veya API anahtarı yoksa **yerleşik şablonla** Türkçe kişisel yorum üretir.
 
 ## Gereksinimler
@@ -51,33 +53,24 @@ npm start
 
 ### 1) GitHub deposu
 
-Proje kökünde (bu klasörde):
+Bu proje şu depoda tutuluyor: **https://github.com/malibuqualista2021-cmd/telegram-astro-bot** (`main`).
+
+Yerel değişiklikleri göndermek için:
 
 ```bash
-git init
 git add .
-git commit -m "Initial MVP: Telegram astro bot"
+git commit -m "mesajın"
+git push origin main
 ```
 
-**Seçenek A — GitHub CLI (`gh`)**
+**Tamamen yeni bir depo** açmak istersen (ör. farklı isim veya hesap):
 
 ```bash
 gh auth login
-gh repo create telegram-astro-bot --public --source=. --remote=origin --push
+gh repo create YENI-REPO-ADI --public --source=. --remote=yeni --push
 ```
 
-Depo adını değiştirmek istersen `telegram-astro-bot` yerine kendi adını yaz.
-
-**Seçenek B — Web arayüzü**
-
-1. [GitHub](https://github.com/new) üzerinden yeni repo oluştur (boş, README ekleme).
-2. Aşağıdaki komutlarda `KULLANICI` ve `REPO` kısımlarını kendi hesabınla değiştir:
-
-```bash
-git remote add origin https://github.com/KULLANICI/REPO.git
-git branch -M main
-git push -u origin main
-```
+Sonra `git remote remove origin` ve `git remote rename yeni origin` gibi adımlarla tek `origin` kullanabilirsin; ya da Railway’de yeni repoyu bağlarsın.
 
 ### 2) Railway
 
