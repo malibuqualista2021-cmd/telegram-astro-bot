@@ -57,6 +57,7 @@ function buildPersonalQuestionPrompt() {
     'chart_mode "partial" veya data_availability ile yükselen/ev kapalıysa bunlar hakkında yorum yapma.',
     'En az 2–3 somut harita öğesine bağlan (ör. Güneş+Ay+Venüs burcu, veya JSON\'daki bir açı; yalnızca veride varsa).',
     'Genel "X burcu şöyledir" cümleleri kullanma; her cümleyi bu haritaya bağla.',
+    'chartData içinde listelenmeyen gezegen açısı veya ev konumu hakkında “var/yok/kare” gibi kesin iddia kullanma.',
     'Kesin kader, sağlık tanısı, yatırım tavsiyesi, ilişki kesinliği verme.',
     'Türkçe, sade, samimi ve kısa.',
     'Markdown kullanma; düz metin.',

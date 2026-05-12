@@ -2,7 +2,7 @@
 
 GitHub: [malibuqualista2021-cmd/telegram-astro-bot](https://github.com/malibuqualista2021-cmd/telegram-astro-bot)
 
-Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir. `/start` sonrası menüye ek olarak **serbest astroloji sorusu** yazılabilir: mesaj önce sınıflandırılır (genel kavram / kişisel harita / transit–MVP dışı / riskli sınır).
+Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir. `/start` sonrası menüye ek olarak **serbest astroloji sorusu** yazılabilir: mesaj `messageClassifier` ile ayrılır (`general_astro_knowledge`, `personal_chart_question`, `unsupported_transit_or_future`, `risky_question`, `normal_flow`). Genel kavramlarda önce **`astroKnowledgeService`** içindeki sözlük katmanı, gerekirse Groq tamamlayıcı kullanılır.
 
 ## Gereksinimler
 
@@ -53,8 +53,8 @@ npm start
 | `services/logger.js` | Yapılandırılmış konsol logları |
 | `services/chartCalculator.js` | Harita hesaplama (LLM yapmaz) |
 | `services/interpretationService.js` | Groq: konu yorumu, serbest kişisel soru, kavram (astroKnowledge’e delege) |
-| `services/astroKnowledgeService.js` | Genel kavram cevapları (harita yok) |
-| `services/messageClassifier.js` | Serbest metin A/B/C/D sınıflandırması |
+| `services/astroKnowledgeService.js` | Kavram sözlüğü (gezegen, burç, ev, açı, retro, ASC, MC, element, nitelik) + genel cevap |
+| `services/messageClassifier.js` | Serbest metin sınıflandırması (general / personal / unsupported / risky / normal_flow) |
 | `services/sessionStore.js` | Bellek içi oturum; son harita `lastChartData` ile sohbet |
 
 ## Notlar (MVP)

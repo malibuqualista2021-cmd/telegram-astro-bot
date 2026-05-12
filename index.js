@@ -375,15 +375,22 @@ bot.on('text', async (ctx) => {
     const cls = messageClassifier.classifyMessage(text);
     logger.info(`Sınıflandırma user_id=${uid} category=${cls.category} reason=${cls.reason}`);
 
-    if (cls.category === 'D') {
+    if (cls.category === 'normal_flow') {
+      await ctx.reply(
+        'Menüden 1–4 ile seçebilir veya astrolojiyle ilgili bir kavram sorabilirsin. Örnek: “Yükselen ne demek?” veya “7. ev nedir?”',
+        intentMenuKeyboard
+      );
+      return;
+    }
+    if (cls.category === 'risky_question') {
       await ctx.reply(MSG_RISKY_BOUNDARY, intentMenuKeyboard);
       return;
     }
-    if (cls.category === 'C') {
+    if (cls.category === 'unsupported_transit_or_future') {
       await ctx.reply(MSG_UNSUPPORTED, intentMenuKeyboard);
       return;
     }
-    if (cls.category === 'B') {
+    if (cls.category === 'personal_chart_question') {
       if (s.lastChartData) {
         await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
         try {
@@ -429,7 +436,7 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    if (cls.category === 'A' && cls.reason === 'birth_time_faq') {
+    if (cls.category === 'general_astro_knowledge' && cls.reason === 'birth_time_faq') {
       await ctx.reply(MSG_BIRTH_TIME_FAQ, intentMenuKeyboard);
       return;
     }
