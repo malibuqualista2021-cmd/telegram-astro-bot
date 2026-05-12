@@ -5,6 +5,7 @@ const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const logger = require('./services/logger');
 const sessionStore = require('./services/sessionStore');
+const userProfileStore = require('./services/userProfileStore');
 const chartCalculator = require('./services/chartCalculator');
 const interpretationService = require('./services/interpretationService');
 const messageClassifier = require('./services/messageClassifier');
@@ -21,6 +22,9 @@ const MSG_RISKY_BOUNDARY =
 
 const MSG_BIRTH_TIME_FAQ =
   'Saati bilmiyorsan sorun değil: haritayı kısmi modda hesaplarım (yükselen ve ev yerleşimleri olmadan). Tarih ve yer net olsa bile Güneş, Ay ve gezegen burçlarına göre kişisel bir özet çıkarabilirim. Menüden "1" ile akışa girebilir veya doğum adımlarında saat sorulunca "bilmiyorum" yazabilirsin.';
+
+const MSG_SAVED_PROFILE_HINT =
+  'Harita bilgilerin kayıtlı. Bu soruya kayıtlı doğum bilgilerine göre yanıt veriyorum.';
 
 const GEOCODE_UA =
   env.GEOCODE_USER_AGENT || 'TelegramAstroMVP/1.0 (https://github.com/)';
@@ -80,6 +84,104 @@ const topicKeyboard = Markup.keyboard([
 ])
   .oneTime()
   .resize();
+
+function cloneJson(obj) {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch {
+    return obj;
+  }
+}
+
+function stripInterpretationFromChart(chartData) {
+  const c = cloneJson(chartData);
+  if (c && typeof c === 'object') delete c.interpretation_request;
+  return c;
+}
+
+function persistProfileFromSession(uid, s, chartData) {
+  if (!s.birthYmd || s.latitude == null || s.longitude == null) return;
+  userProfileStore.updateProfile(uid, {
+    birthDate: { ...s.birthYmd },
+    birthDateText: s.birthDateText || '',
+    birthPlace: {
+      label: s.placeLabel || '',
+      latitude: s.latitude,
+      longitude: s.longitude,
+      searchText: (s.placeText || s.placeLabel || '').trim(),
+    },
+    birthTime:
+      s.hasKnownBirthTime && s.birthHour != null
+        ? { hour: s.birthHour, minute: s.birthMinute }
+        : null,
+    birthTimeKnown: Boolean(s.hasKnownBirthTime),
+    chartMode: chartData.chart_mode === 'full' ? 'full' : 'partial',
+    lastChartData: stripInterpretationFromChart(chartData),
+  });
+}
+
+function sessionFieldsFromProfile(prof) {
+  const hasT = prof.birthTimeKnown && prof.birthTime;
+  return {
+    birthYmd: { ...prof.birthDate },
+    birthDateText: prof.birthDateText || '',
+    placeText: prof.birthPlace.searchText || prof.birthPlace.label,
+    placeLabel: prof.birthPlace.label,
+    latitude: prof.birthPlace.latitude,
+    longitude: prof.birthPlace.longitude,
+    birthHour: hasT ? prof.birthTime.hour : 12,
+    birthMinute: hasT ? prof.birthTime.minute : 0,
+    hasKnownBirthTime: prof.birthTimeKnown,
+    birthTimeText: hasT
+      ? `${String(prof.birthTime.hour).padStart(2, '0')}:${String(prof.birthTime.minute).padStart(2, '0')}`
+      : 'bilmiyorum',
+  };
+}
+
+function chartFromUserProfile(prof) {
+  return chartCalculator.calculateChart({
+    year: prof.birthDate.year,
+    month: prof.birthDate.month,
+    day: prof.birthDate.day,
+    hour: prof.birthTimeKnown && prof.birthTime ? prof.birthTime.hour : 12,
+    minute: prof.birthTimeKnown && prof.birthTime ? prof.birthTime.minute : 0,
+    latitude: prof.birthPlace.latitude,
+    longitude: prof.birthPlace.longitude,
+    hasKnownBirthTime: prof.birthTimeKnown,
+    placeLabel: prof.birthPlace.label,
+  });
+}
+
+/**
+ * Oturumda harita yoksa profilden yükle veya doğum alanlarından yeniden hesapla.
+ * @returns {{ chart: object|null, usedSavedProfile: boolean }}
+ */
+function resolveChartForUser(uid, session) {
+  if (session.lastChartData) {
+    return { chart: stripInterpretationFromChart(cloneJson(session.lastChartData)), usedSavedProfile: false };
+  }
+  const prof = userProfileStore.getProfile(uid);
+  if (prof && prof.lastChartData) {
+    return { chart: stripInterpretationFromChart(cloneJson(prof.lastChartData)), usedSavedProfile: true };
+  }
+  if (userProfileStore.isProfileComplete(prof)) {
+    let chart;
+    try {
+      chart = chartFromUserProfile(prof);
+    } catch {
+      return { chart: null, usedSavedProfile: false };
+    }
+    if (!chart.planets || chart.planets.length < 10) {
+      return { chart: null, usedSavedProfile: false };
+    }
+    userProfileStore.updateProfile(uid, {
+      lastChartData: stripInterpretationFromChart(chart),
+      chartMode: chart.chart_mode === 'full' ? 'full' : 'partial',
+    });
+    return { chart: stripInterpretationFromChart(chart), usedSavedProfile: true };
+  }
+  return { chart: null, usedSavedProfile: false };
+}
 
 function chunkTelegram(text, maxLen = 4000) {
   const t = String(text || '');
@@ -230,6 +332,7 @@ async function deliverChartReading(ctx, uid, s, topicCode) {
     else await ctx.reply(parts[i]);
   }
 
+  persistProfileFromSession(uid, s, chartData);
   sessionStore.prepareForNextChat(uid, chartData);
   await ctx.reply('Sormaya devam edebilir veya menüden yeni bir akış seçebilirsin.', intentMenuKeyboard);
 }
@@ -288,14 +391,21 @@ async function deliverChartReadingFreeform(ctx, uid, s) {
     else await ctx.reply(parts[i]);
   }
 
+  persistProfileFromSession(uid, s, chartData);
   sessionStore.prepareForNextChat(uid, chartData);
   await ctx.reply('Başka bir sorun olursa yazabilirsin; menü aşağıda.', intentMenuKeyboard);
 }
 
 bot.start(async (ctx) => {
-  logger.info(`Kullanıcı /start yazdı user_id=${ctx.from?.id}`);
-  sessionStore.reset(ctx.from.id);
-  sessionStore.set(ctx.from.id, { step: 'await_intent' });
+  const uid = ctx.from.id;
+  logger.info(`Kullanıcı /start yazdı user_id=${uid}`);
+  sessionStore.reset(uid);
+  const prof = userProfileStore.getProfile(uid);
+  const init = { step: 'await_intent' };
+  if (prof && prof.lastChartData) {
+    init.lastChartData = cloneJson(prof.lastChartData);
+  }
+  sessionStore.set(uid, init);
   await ctx.reply(START_INTRO, intentMenuKeyboard);
 });
 
@@ -303,12 +413,71 @@ bot.command('help', async (ctx) => {
   await ctx.reply(
     [
       'Komutlar:',
-      '/start — menüyü ve sohbeti sıfırlar.',
+      '/start — menüyü ve oturumu sıfırlar (kayıtlı doğum profilin kalır).',
       '/help — bu mesaj',
+      '/profile — kayıtlı doğum bilgilerini gösterir.',
+      '/update_birth — doğum bilgilerini yeniden girersin.',
+      '/reset — kayıtlı doğum profilini siler ve sohbeti sıfırlar.',
       '',
       'Menüden seçebilir veya doğrudan astroloji sorusu yazabilirsin.',
-      'Kişisel yorum için doğum bilgisi ve hesaplanmış harita gerekir; kavram sorularında genel bilgi verilir.',
+      'Kişisel yorum için doğum bilgisi ve harita gerekir; bir kez kaydettikten sonra tekrar sormamaya çalışırım. Kavram sorularında genel bilgi verilir.',
     ].join('\n')
+  );
+});
+
+bot.command('profile', async (ctx) => {
+  const uid = ctx.from.id;
+  const p = userProfileStore.getProfile(uid);
+  if (!userProfileStore.isProfileComplete(p)) {
+    await ctx.reply(
+      'Henüz kayıtlı doğum profilin yok. Menüden "1" veya "2" ile doğum bilgilerini ekleyebilir veya kişisel bir soru yazarak akışı başlatabilirsin.'
+    );
+    return;
+  }
+  const dateStr = `${p.birthDate.day}.${p.birthDate.month}.${p.birthDate.year}`;
+  const timeStr =
+    p.birthTimeKnown && p.birthTime
+      ? `${String(p.birthTime.hour).padStart(2, '0')}:${String(p.birthTime.minute).padStart(2, '0')}`
+      : 'Bilinmiyor (kısmi harita)';
+  await ctx.reply(
+    [
+      'Kayıtlı doğum profilin:',
+      `Tarih: ${dateStr}`,
+      `Yer: ${p.birthPlace.label}`,
+      `Saat: ${timeStr}`,
+      `Mod: ${p.chartMode === 'full' ? 'Tam harita' : 'Kısmi harita'}`,
+      '',
+      'Güncellemek için: /update_birth',
+      'Silmek için: /reset',
+    ].join('\n')
+  );
+});
+
+bot.command('reset', async (ctx) => {
+  const uid = ctx.from.id;
+  userProfileStore.deleteProfile(uid);
+  sessionStore.reset(uid);
+  sessionStore.set(uid, { step: 'await_intent' });
+  logger.info(`Kullanıcı /reset profil silindi user_id=${uid}`);
+  await ctx.reply(
+    ['Kayıtlı doğum profilin silindi. Yeniden kaydetmek için menüden "1" veya "2" ile ilerleyebilirsin.', '', START_INTRO].join(
+      '\n'
+    ),
+    intentMenuKeyboard
+  );
+});
+
+bot.command('update_birth', async (ctx) => {
+  const uid = ctx.from.id;
+  sessionStore.set(uid, {
+    ...sessionStore.defaultSession(),
+    step: 'await_date',
+    intent: 'update_birth',
+  });
+  logger.info(`Kullanıcı /update_birth user_id=${uid}`);
+  await ctx.reply(
+    'Doğum bilgilerini yenilemek için doğum tarihini yaz. (örn: 1998-07-07 veya 7.7.1998)',
+    Markup.removeKeyboard()
   );
 });
 
@@ -329,6 +498,27 @@ bot.on('text', async (ctx) => {
     const pi = parseMainIntent(text);
     if (pi.ok) {
       if (pi.n === 1) {
+        const prof = userProfileStore.getProfile(uid);
+        if (userProfileStore.isProfileComplete(prof)) {
+          sessionStore.set(uid, {
+            ...sessionStore.defaultSession(),
+            step: 'await_topic',
+            intent: 'chart',
+            topicCodePreset: null,
+            pendingFreeformPersonal: null,
+            lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
+            ...sessionFieldsFromProfile(prof),
+          });
+          logger.info(`Niyet:1 kayıtlı profil user_id=${uid}`);
+          await ctx.reply(
+            [
+              'Kayıtlı doğum bilgilerinle devam ediyorum.',
+              'Hangi konuda odaklanayım? Aşağıdan seç veya 1–5 yaz:',
+            ].join('\n'),
+            topicKeyboard
+          );
+          return;
+        }
         sessionStore.set(uid, {
           step: 'await_date',
           intent: 'chart',
@@ -391,11 +581,16 @@ bot.on('text', async (ctx) => {
       return;
     }
     if (cls.category === 'personal_chart_question') {
-      if (s.lastChartData) {
+      const resolved = resolveChartForUser(uid, s);
+      if (resolved.chart) {
+        if (resolved.usedSavedProfile) {
+          await ctx.reply(MSG_SAVED_PROFILE_HINT, intentMenuKeyboard);
+        }
+        sessionStore.set(uid, { ...sessionStore.get(uid), lastChartData: resolved.chart });
         await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
         try {
           const ans = await interpretationService.answerPersonalQuestion(
-            s.lastChartData,
+            resolved.chart,
             text,
             env.GROQ_API_KEY,
             env.GROQ_MODEL
@@ -464,6 +659,22 @@ bot.on('text', async (ctx) => {
     const tp = parseTopicCode(text);
     if (!tp.ok) {
       await ctx.reply(tp.error, topicKeyboard);
+      return;
+    }
+    const prof = userProfileStore.getProfile(uid);
+    if (userProfileStore.isProfileComplete(prof)) {
+      const hydrated = {
+        ...sessionStore.get(uid),
+        ...sessionFieldsFromProfile(prof),
+        topicCodePreset: tp.code,
+        pendingFreeformPersonal: null,
+      };
+      logger.info(`Ön seçilen konu topic=${tp.code} kayıtlı profil user_id=${uid}`);
+      await ctx.reply(
+        ['Kayıtlı doğum bilgilerinle haritayı hazırlıyorum…', 'Biraz bekle.'].join('\n'),
+        Markup.removeKeyboard()
+      );
+      await deliverChartReading(ctx, uid, hydrated, tp.code);
       return;
     }
     sessionStore.set(uid, {

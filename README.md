@@ -56,12 +56,14 @@ npm start
 | `services/astroKnowledgeService.js` | Kavram sözlüğü (gezegen, burç, ev, açı, retro, ASC, MC, element, nitelik) + genel cevap |
 | `services/messageClassifier.js` | Serbest metin sınıflandırması (general / personal / unsupported / risky / normal_flow) |
 | `services/sessionStore.js` | Bellek içi oturum; son harita `lastChartData` ile sohbet |
+| `services/userProfileStore.js` | Telegram `userId` ile doğum profili ve son `chartData` (MVP: bellek) |
 
 ## Notlar (MVP)
 
 - Doğum yeri metni **Nominatim** ile koordinata çevrilir; ağ erişimi gerekir.
 - Saat bilinmiyorsa harita **kısmi** moddadır: yükselen ve evler JSON’da yoktur; gezegen burçları için yerel **12:00** kullanılır (kütüphane timezone’u koordinattan türetir).
 - Oturum verisi bellekte tutulur; sunucu yeniden başlayınca sıfırlanır.
+- **Kullanıcı profili (doğum bilgisi):** Bu MVP sürümde profiller `userProfileStore` ile bellekte tutulur. **Railway veya süreç yeniden başlarsa kayıtlar silinebilir.** Üretim için PostgreSQL, Redis veya Supabase gibi kalıcı depolama önerilir. `/reset` komutu profili bilinçli olarak siler.
 - Groq veya ağ hatalarında kullanıcıya kısa bir hata mesajı gösterilir; ayrıntılar **Railway / sunucu loglarında** `logger` ile yazılır.
 
 ## GitHub ve Railway ile canlıya alma
