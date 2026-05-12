@@ -167,6 +167,81 @@ async function explainAstrologicalConcept(userQuestion, apiKey, model) {
   return astroKnowledgeService.answerGeneralConcept(userQuestion, apiKey, model);
 }
 
+async function summarizePreviousAnswer(previousAssistantText, latestUserMessage, apiKey, model) {
+  const prev = String(previousAssistantText || '').trim();
+  if (prev.length < 30) throw new Error('NOTHING_TO_SUMMARIZE');
+
+  logger.info('Groq: önceki yanıt özetleme başladı', { model });
+  const client = buildGroqClient(apiKey);
+  const sys = [
+    'Kullanıcı, asistanın bir önceki mesajını daha kısa ve anlaşılır istiyor.',
+    'SADECE verilen "önceki_yanıt" metnini özetle ve sadeleştir; yeni gezegen, ev, burç, tarih, isim veya harita detayı UYDURMA.',
+    'Astrolojik iddia veya kehanet ekleme; sadece metinde geçenleri daha net anlat.',
+    'Türkçe, 4–10 kısa cümle veya madde; düz metin, markdown yok.',
+    'Kesin kader, sağlık, hukuk, yatırım sonucu ekleme.',
+  ].join('\n');
+
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.35,
+      max_tokens: 700,
+      messages: [
+        { role: 'system', content: sys },
+        {
+          role: 'user',
+          content: `Kullanıcının son mesajı (isteği):\n${String(latestUserMessage || '').trim()}\n\nÖnceki yanıt:\n${prev}`,
+        },
+      ],
+    });
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) throw new Error('EMPTY_SUMMARY');
+    logger.info('Groq: önceki yanıt özetleme bitti');
+    return sanitizeAiOutputOrThrow(text, 'summarizePreviousAnswer');
+  } catch (e) {
+    logGroqError('Groq özetleme', e);
+    throw e;
+  }
+}
+
+async function generateDirectChatReply(userMessage, apiKey, model, options = {}) {
+  const hint = String(options.hint || '').trim().slice(0, 400);
+  const ctx = String(options.contextSummary || '').trim().slice(0, 600);
+
+  logger.info('Groq: doğal sohbet yanıtı başladı', { model });
+  const client = buildGroqClient(apiKey);
+  const sys = [
+    'Sen sıcak ve sakin bir astroloji sohbet asistanısın.',
+    'Kullanıcı mesajına doğal, kısa ve samimi yanıt ver (2–6 cümle).',
+    'Astrolojik veri, harita, ev veya gezegen yerleşimi UYDURMA; kişisel harita için doğum bilgisi gerekir demeden, istersen nazikçe astrolojiye bağlan.',
+    'Sağlık, hukuk, yatırım, kesin kader veya kesin ilişki sonucu verme.',
+    'Türkçe Latin alfabesi; markdown yok.',
+  ].join('\n');
+
+  let userBlock = `Kullanıcı mesajı:\n${String(userMessage || '').trim()}`;
+  if (ctx) userBlock += `\n\nBağlam özeti:\n${ctx}`;
+  if (hint) userBlock += `\n\nİpucu (yönlendirme): ${hint}`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: 0.65,
+      max_tokens: 450,
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: userBlock },
+      ],
+    });
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) throw new Error('EMPTY_DIRECT_REPLY');
+    logger.info('Groq: doğal sohbet yanıtı bitti');
+    return sanitizeAiOutputOrThrow(text, 'generateDirectChatReply');
+  } catch (e) {
+    logGroqError('Groq doğal sohbet', e);
+    throw e;
+  }
+}
+
 async function generateHoraryInterpretation(horaryChartData, apiKey, model) {
   logger.info('Groq: horary yorumu başladı', { model });
   const client = buildGroqClient(apiKey);
@@ -198,5 +273,7 @@ module.exports = {
   answerPersonalQuestion,
   explainAstrologicalConcept,
   generateHoraryInterpretation,
+  summarizePreviousAnswer,
+  generateDirectChatReply,
   TOPIC_LABEL_TR,
 };

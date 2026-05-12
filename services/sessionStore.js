@@ -11,6 +11,12 @@ function defaultSession() {
     topicCodePreset: null,
     pendingFreeformPersonal: null,
     lastChartData: null,
+    /** Son tur sohbet bağlamı (özetleme / kısa mesajlar için) */
+    lastUserMessage: null,
+    lastAssistantAnswer: null,
+    lastIntent: null,
+    lastReplyMode: null,
+    lastHoraryChartData: null,
     birthDateText: null,
     birthYmd: null,
     placeText: null,
@@ -50,6 +56,7 @@ function reset(userId) {
  * Doğum verisini temizler, son haritayı saklar, sohbet menüsüne döner.
  */
 function prepareForNextChat(userId, chartData) {
+  const prev = get(userId);
   let snapshot = null;
   try {
     snapshot = JSON.parse(JSON.stringify(chartData));
@@ -62,6 +69,7 @@ function prepareForNextChat(userId, chartData) {
   const base = defaultSession();
   base.step = 'await_intent';
   base.lastChartData = snapshot;
+  base.lastHoraryChartData = prev.lastHoraryChartData;
   sessions.set(String(userId), base);
 }
 
