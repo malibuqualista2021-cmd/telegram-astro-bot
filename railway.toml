@@ -1,5 +1,5 @@
 # Railway: GitHub deploy — Node.js bot (Telegraf + Express health)
-# Ortam: BOT_TOKEN, OPENAI_API_KEY (opsiyonel), GEOCODE_USER_AGENT, PORT (Railway verir)
+# Ortam: BOT_TOKEN, GROQ_API_KEY, GROQ_MODEL (opsiyonel), GEOCODE_USER_AGENT, PORT (Railway verir)
 # https://docs.railway.app/deploy/config-as-code
 
 [build]

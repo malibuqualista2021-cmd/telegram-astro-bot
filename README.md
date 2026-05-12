@@ -2,11 +2,19 @@
 
 GitHub: [malibuqualista2021-cmd/telegram-astro-bot](https://github.com/malibuqualista2021-cmd/telegram-astro-bot)
 
-Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; yorumu **OpenAI** ile üretir.
+Doğum tarihi, yer ve (isteğe bağlı) saat toplar; haritayı **circular-natal-horoscope-js** (tropical, Placidus) ile hesaplar; metin yorumunu **Groq** (Llama) ile üretir.
 
 ## Gereksinimler
 
 - Node.js **18+** (global `fetch` için)
+
+## Groq API key
+
+1. [Groq Console](https://console.groq.com/) hesabı aç veya giriş yap.
+2. **API Keys** bölümünden yeni anahtar oluştur.
+3. Yerelde `.env` içine `GROQ_API_KEY=...` yaz; Railway’de **Variables** olarak aynı isimle ekle.
+
+Varsayılan model: **`llama-3.3-70b-versatile`**. İstersen `GROQ_MODEL` ile değiştirebilirsin (Groq’un desteklediği bir model adı olmalı).
 
 ## Kurulum
 
@@ -16,16 +24,16 @@ npm install
 copy .env.example .env
 ```
 
-`.env` içinde **zorunlu** değişkenler:
+`.env` içinde **zorunlu** değişkenler (örnek için `.env.example` dosyasına bak):
 
 - **`BOT_TOKEN`** — Telegram [@BotFather](https://t.me/BotFather)
-- **`OPENAI_API_KEY`** — yorum metni için
+- **`GROQ_API_KEY`** — [Groq Console](https://console.groq.com/keys)
 
 İsteğe bağlı:
 
-- **`OPENAI_MODEL`** — varsayılan `gpt-4o-mini`.
-- **`PORT`** — yoksa **3000** kullanılır (Railway genelde `PORT` tanımlar).
-- **`GEOCODE_USER_AGENT`** — OpenStreetMap Nominatim için tanımlayıcı (politika gereği anlamlı bir değer verin).
+- **`GROQ_MODEL`** — varsayılan `llama-3.3-70b-versatile`
+- **`PORT`** — yoksa **3000** kullanılır (Railway genelde `PORT` tanımlar)
+- **`GEOCODE_USER_AGENT`** — OpenStreetMap Nominatim için tanımlayıcı (politika gereği anlamlı bir değer verin)
 
 ## Çalıştırma
 
@@ -40,11 +48,11 @@ npm start
 
 | Dosya | Görev |
 |--------|--------|
-| `config/env.js` | `.env` doğrulama (`BOT_TOKEN`, `OPENAI_API_KEY`; `PORT` varsayılan 3000) |
+| `config/env.js` | `.env` doğrulama (`BOT_TOKEN`, `GROQ_API_KEY`; `PORT` varsayılan 3000) |
 | `index.js` | Express + Telegraf akışı, hata yakalama |
 | `services/logger.js` | Yapılandırılmış konsol logları |
-| `services/chartCalculator.js` | Harita hesaplama (AI yapmaz) |
-| `services/interpretationService.js` | OpenAI yorum metni |
+| `services/chartCalculator.js` | Harita hesaplama (LLM yapmaz) |
+| `services/interpretationService.js` | Groq ile yorum / kavram metni |
 | `services/sessionStore.js` | Bellek içi oturum |
 
 ## Notlar (MVP)
@@ -52,6 +60,7 @@ npm start
 - Doğum yeri metni **Nominatim** ile koordinata çevrilir; ağ erişimi gerekir.
 - Saat bilinmiyorsa harita **kısmi** moddadır: yükselen ve evler JSON’da yoktur; gezegen burçları için yerel **12:00** kullanılır (kütüphane timezone’u koordinattan türetir).
 - Oturum verisi bellekte tutulur; sunucu yeniden başlayınca sıfırlanır.
+- Groq veya ağ hatalarında kullanıcıya kısa bir hata mesajı gösterilir; ayrıntılar **Railway / sunucu loglarında** `logger` ile yazılır.
 
 ## GitHub ve Railway ile canlıya alma
 
@@ -83,16 +92,17 @@ Sonra `git remote remove origin` ve `git remote rename yeni origin` gibi adımla
 
 | Değişken | Zorunlu | Açıklama |
 |----------|---------|----------|
-| `BOT_TOKEN` | Evet | Telegram bot token (eski Python servisinde `TELEGRAM_BOT_TOKEN` kullandıysan Railway’de adı **`BOT_TOKEN`** olacak şekilde güncelle) |
-| `OPENAI_API_KEY` | Evet | Yorum üretimi (OpenAI) |
-| `OPENAI_MODEL` | Hayır | Örn. `gpt-4o-mini` |
+| `BOT_TOKEN` | Evet | Telegram bot token |
+| `GROQ_API_KEY` | Evet | Groq API anahtarı ([console](https://console.groq.com/keys)) |
+| `GROQ_MODEL` | Hayır | Varsayılan: `llama-3.3-70b-versatile` |
 | `GEOCODE_USER_AGENT` | Önerilir | Nominatim için; örn. `MyAstroBot/1.0 (github.com/kullanici/repo)` |
 | `PORT` | Hayır | Railway genelde otomatik verir; tanımlı değilse uygulama **3000** kullanır |
 
 3. **Deploy**: `npm start` ile süreç ayağa kalkar (Railway `PORT` atar; sunucu `0.0.0.0` üzerinde dinler).
 4. **Sağlık kontrolü**: `https://<domain>/` veya `/health` → düz metin: `Astrology bot is running`
+5. **Loglar**: Railway **Deployments → View Logs**; Groq hatalarında `HTTP status`, `mesaj` ve stack izleri görünür.
 
-Bu MVP **long polling** kullanır; ayrıca webhook URL’i tanımlaman gerekmez. Tek servis/replica kullan (aynı `BOT_TOKEN` ile iki yerden polling yapma).
+Bu MVP **long polling** kullanır; webhook gerekmez. Tek servis/replica kullan (aynı `BOT_TOKEN` ile iki yerden polling yapma).
 
 ## Lisans
 

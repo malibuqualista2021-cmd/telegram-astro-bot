@@ -1,10 +1,9 @@
 /**
- * AI yorum katmanı — sadece verilen chartData üzerinden metin üretir.
- * OPENAI_API_KEY uygulama açılışında doğrulanır; burada yalnızca API çağrısı yapılır.
- * Hata durumunda üst katmana fırlatılır (kullanıcı mesajı index.js’te).
+ * AI yorum katmanı — Groq (chat completions). Yalnızca verilen chartData’ya dayanır.
+ * GROQ_API_KEY uygulama açılışında doğrulanır; hata durumunda üst katmana fırlatılır.
  */
 
-const OpenAI = require('openai');
+const Groq = require('groq-sdk');
 const logger = require('./logger');
 
 const TOPIC_LABEL_TR = {
@@ -14,6 +13,20 @@ const TOPIC_LABEL_TR = {
   inner_family: 'İç dünya, duygular, aile',
   communication_learning: 'İletişim, öğrenme, kendini ifade',
 };
+
+function logGroqError(context, err) {
+  logger.error(`${context} (Groq)`, err);
+  if (err && typeof err === 'object') {
+    if (err.status) logger.error(`${context} HTTP status`, err.status);
+    if (err.message) logger.error(`${context} mesaj`, err.message);
+    if (err.error) logger.error(`${context} error alanı`, err.error);
+    if (err.code) logger.error(`${context} kod`, err.code);
+  }
+}
+
+function buildGroqClient(apiKey) {
+  return new Groq({ apiKey });
+}
 
 function buildSystemPrompt() {
   return [
@@ -48,12 +61,13 @@ function buildConceptSystemPrompt() {
 }
 
 async function generateInterpretation(chartData, apiKey, model) {
-  logger.info('AI yorum üretimi başladı', {
+  logger.info('Groq: harita yorumu başladı', {
     topic: chartData.interpretation_request?.topic_code,
     chart_mode: chartData.chart_mode,
+    model,
   });
 
-  const client = new OpenAI({ apiKey });
+  const client = buildGroqClient(apiKey);
 
   const topicCode = chartData.interpretation_request?.topic_code || 'general';
   const topicLabel = TOPIC_LABEL_TR[topicCode] || topicCode;
@@ -83,19 +97,19 @@ async function generateInterpretation(chartData, apiKey, model) {
 
     const text = completion.choices[0]?.message?.content?.trim();
     if (!text) {
-      logger.warn('AI yorum boş döndü');
+      logger.warn('Groq: harita yorumu boş choices');
       throw new Error('EMPTY_INTERPRETATION');
     }
-    logger.info('AI yorum üretimi bitti');
+    logger.info('Groq: harita yorumu bitti');
     return text;
   } catch (e) {
-    logger.error('AI yorum üretimi hata', e);
+    logGroqError('Groq harita yorumu', e);
     throw e;
   }
 }
 
 /**
- * Kişisel harita olmadan yalnızca genel kavram açıklaması (OpenAI).
+ * Kişisel harita olmadan yalnızca genel kavram açıklaması (Groq).
  */
 async function explainAstrologicalConcept(userQuestion, apiKey, model) {
   const q = (userQuestion || '').trim();
@@ -103,9 +117,9 @@ async function explainAstrologicalConcept(userQuestion, apiKey, model) {
     throw new Error('QUESTION_TOO_SHORT');
   }
 
-  logger.info('Genel kavram açıklaması başladı');
+  logger.info('Groq: genel kavram açıklaması başladı', { model });
 
-  const client = new OpenAI({ apiKey });
+  const client = buildGroqClient(apiKey);
 
   try {
     const completion = await client.chat.completions.create({
@@ -123,13 +137,13 @@ async function explainAstrologicalConcept(userQuestion, apiKey, model) {
 
     const text = completion.choices[0]?.message?.content?.trim();
     if (!text) {
-      logger.warn('Genel kavram yanıtı boş');
+      logger.warn('Groq: genel kavram yanıtı boş');
       throw new Error('EMPTY_CONCEPT_REPLY');
     }
-    logger.info('Genel kavram açıklaması bitti');
+    logger.info('Groq: genel kavram açıklaması bitti');
     return text;
   } catch (e) {
-    logger.error('Genel kavram açıklaması hata', e);
+    logGroqError('Groq genel kavram', e);
     throw e;
   }
 }

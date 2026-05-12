@@ -10,7 +10,7 @@ function loadEnv() {
   const PORT = Number.isFinite(parsed) && parsed > 0 ? parsed : 3000;
 
   const BOT_TOKEN = (process.env.BOT_TOKEN || '').trim();
-  const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
+  const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').trim();
 
   const errors = [];
   if (!BOT_TOKEN) {
@@ -18,9 +18,9 @@ function loadEnv() {
       'BOT_TOKEN tanımlı değil. Telegram BotFather token\'ını .env veya ortam değişkeni olarak ekle.'
     );
   }
-  if (!OPENAI_API_KEY) {
+  if (!GROQ_API_KEY) {
     errors.push(
-      'OPENAI_API_KEY tanımlı değil. Yorum üretimi için OpenAI API anahtarını .env veya ortam değişkeni olarak ekle.'
+      'GROQ_API_KEY tanımlı değil. Yorum üretimi için Groq API anahtarını .env veya ortam değişkeni olarak ekle.'
     );
   }
 
@@ -32,11 +32,13 @@ function loadEnv() {
     process.exit(1);
   }
 
+  const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+
   return {
     BOT_TOKEN,
-    OPENAI_API_KEY,
+    GROQ_API_KEY,
     PORT,
-    OPENAI_MODEL: (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim(),
+    GROQ_MODEL: (process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL).trim(),
     GEOCODE_USER_AGENT: (process.env.GEOCODE_USER_AGENT || '').trim(),
   };
 }

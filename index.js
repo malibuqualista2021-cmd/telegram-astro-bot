@@ -203,8 +203,8 @@ async function deliverChartReading(ctx, uid, s, topicCode) {
   try {
     interpretation = await interpretationService.generateInterpretation(
       chartData,
-      env.OPENAI_API_KEY,
-      env.OPENAI_MODEL
+      env.GROQ_API_KEY,
+      env.GROQ_MODEL
     );
   } catch (e) {
     logger.error(`AI yorum hatası user_id=${uid}`, e);
@@ -333,8 +333,8 @@ bot.on('text', async (ctx) => {
     try {
       out = await interpretationService.explainAstrologicalConcept(
         text,
-        env.OPENAI_API_KEY,
-        env.OPENAI_MODEL
+        env.GROQ_API_KEY,
+        env.GROQ_MODEL
       );
     } catch (e) {
       logger.error(`Genel kavram hatası user_id=${uid}`, e);
