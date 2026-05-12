@@ -22,6 +22,7 @@ function defaultSession() {
     birthMinute: null,
     hasKnownBirthTime: null,
     topicCode: null,
+    pendingTopicCode: null,
   };
 }
 
