@@ -79,7 +79,7 @@ Sonra `git remote remove origin` ve `git remote rename yeni origin` gibi adımla
 
 | Değişken | Zorunlu | Açıklama |
 |----------|---------|----------|
-| `BOT_TOKEN` | Evet | Telegram bot token |
+| `BOT_TOKEN` | Evet | Telegram bot token (eski Python servisinde `TELEGRAM_BOT_TOKEN` kullandıysan Railway’de adı **`BOT_TOKEN`** olacak şekilde güncelle) |
 | `OPENAI_API_KEY` | Hayır | Yorum için OpenAI |
 | `OPENAI_MODEL` | Hayır | Örn. `gpt-4o-mini` |
 | `GEOCODE_USER_AGENT` | Önerilir | Nominatim için; örn. `MyAstroBot/1.0 (github.com/kullanici/repo)` |
