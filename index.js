@@ -29,6 +29,12 @@ const MSG_BIRTH_TIME_FAQ =
 const MSG_SAVED_PROFILE_HINT =
   'Harita bilgilerin kayıtlı. Bu soruya kayıtlı doğum bilgilerine göre yanıt veriyorum.';
 
+const MSG_INTENT_GROQ_FALLBACK =
+  'Niyetini çözerken kısa bir bağlantı sorunu oldu; mesajına yine de yanıt vermeye çalışıyorum.';
+
+const MSG_DISAMBIG_PERSONAL_VS_GENERAL =
+  'Bunu kişisel haritan üzerinden yorumlamamı mı istiyorsun, yoksa genel astrolojik anlamını mı öğrenmek istiyorsun? “Haritam” veya “genel” diye kısaca yazman yeterli.';
+
 const GEOCODE_UA =
   env.GEOCODE_USER_AGENT || 'TelegramAstroMVP/1.0 (https://github.com/)';
 
@@ -433,6 +439,324 @@ async function deliverChartReadingFreeform(ctx, uid, s) {
   await ctx.reply('Başka bir sorun olursa yazabilirsin.', Markup.removeKeyboard());
 }
 
+async function runIntentClassificationFlow(ctx, uid, s, text, options = {}) {
+  const skipDigit = options.skipDigitShortcut === true;
+
+  if (!skipDigit && /^[1-4]\b/.test(text.trim())) {
+    const pi = parseMainIntent(text);
+    if (pi.ok) {
+      if (pi.n === 1) {
+        const prof = userProfileStore.getProfile(uid);
+        if (userProfileStore.isProfileComplete(prof)) {
+          sessionStore.set(uid, {
+            ...sessionStore.defaultSession(),
+            step: 'await_topic',
+            intent: 'chart',
+            topicCodePreset: null,
+            pendingFreeformPersonal: null,
+            pendingTopicCode: null,
+            lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
+            ...sessionFieldsFromProfile(prof),
+          });
+          logger.info(`Kısayol:1 kayıtlı profil user_id=${uid}`);
+          await ctx.reply(
+            [
+              'Kayıtlı doğum bilgilerinle devam ediyorum.',
+              'Hangi konuda özet istersin? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim.',
+            ].join('\n'),
+            Markup.removeKeyboard()
+          );
+          return;
+        }
+        sessionStore.set(uid, {
+          step: 'await_date',
+          intent: 'chart',
+          topicCodePreset: null,
+          pendingFreeformPersonal: null,
+          pendingTopicCode: null,
+        });
+        logger.info(`Kısayol:1 doğum toplama user_id=${uid}`);
+        await ctx.reply(
+          'Tamam. Kişisel harita için doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
+          Markup.removeKeyboard()
+        );
+        return;
+      }
+      if (pi.n === 2) {
+        sessionStore.set(uid, {
+          step: 'await_topic_preset',
+          intent: 'chart_topic_first',
+          topicCodePreset: null,
+          pendingFreeformPersonal: null,
+          pendingTopicCode: null,
+        });
+        logger.info(`Kısayol:2 önce konu user_id=${uid}`);
+        await ctx.reply(
+          'Hangi başlıkla ilerleyelim? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim — kısaca yazman yeterli.',
+          Markup.removeKeyboard()
+        );
+        return;
+      }
+      if (pi.n === 3) {
+        sessionStore.set(uid, { step: 'await_concept', intent: 'concept', pendingTopicCode: null });
+        logger.info(`Kısayol:3 kavram user_id=${uid}`);
+        await ctx.reply('Hangi kavramı merak ediyorsun? Kısaca yazabilirsin.', Markup.removeKeyboard());
+        return;
+      }
+      if (pi.n === 4) {
+        logger.info(`Kısayol:4 transit yok user_id=${uid}`);
+        await ctx.reply(MSG_UNSUPPORTED, Markup.removeKeyboard());
+        return;
+      }
+    }
+  }
+
+  const cls = await messageClassifier.classifyMessageAsync(text, {
+    apiKey: env.GROQ_API_KEY,
+    model: env.GROQ_MODEL,
+  });
+  logger.info(
+    `Sınıflandırma user_id=${uid} category=${cls.category} reason=${cls.reason} source=${cls.intentSource} conf=${cls.confidence}`
+  );
+
+  const kb = Markup.removeKeyboard();
+
+  if (cls.intentSource === 'groq_error') {
+    await ctx.reply(MSG_INTENT_GROQ_FALLBACK, kb);
+  }
+
+  if (cls.ambiguousPersonalVsGeneral) {
+    sessionStore.set(uid, {
+      ...sessionStore.get(uid),
+      step: 'await_intent_clarify',
+      pendingClarifyText: text,
+    });
+    await ctx.reply(MSG_DISAMBIG_PERSONAL_VS_GENERAL, kb);
+    return;
+  }
+
+  if (cls.category === 'reset_profile') {
+    userProfileStore.deleteProfile(uid);
+    sessionStore.reset(uid);
+    sessionStore.set(uid, { step: 'await_intent' });
+    logger.info(`Metin: reset_profile user_id=${uid}`);
+    await ctx.reply(
+      'Kayıtlı doğum profilin silindi. İstersen yeniden doğum bilgisi vererek devam edebilirsin.',
+      kb
+    );
+    await ctx.reply(START_INTRO, kb);
+    return;
+  }
+
+  if (cls.category === 'update_birth_data') {
+    sessionStore.set(uid, {
+      ...sessionStore.defaultSession(),
+      step: 'await_date',
+      intent: 'update_birth',
+      pendingTopicCode: null,
+    });
+    logger.info(`Metin: update_birth_data user_id=${uid}`);
+    await ctx.reply(
+      'Tamam. Yeni doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
+      kb
+    );
+    return;
+  }
+
+  if (cls.category === 'unsupported_horary') {
+    await ctx.reply(MSG_HORARY, kb);
+    return;
+  }
+
+  if (cls.category === 'unsupported_transit') {
+    await ctx.reply(MSG_UNSUPPORTED, kb);
+    return;
+  }
+
+  if (cls.category === 'risky_question') {
+    await ctx.reply(MSG_RISKY_BOUNDARY, kb);
+    return;
+  }
+
+  if (cls.category === 'unclear_message') {
+    const rawTrim = text.trim();
+    const low = rawTrim.toLocaleLowerCase('tr-TR');
+    const tpPick = parseTopicCode(text);
+    const looksLikeTopicLabel =
+      tpPick.ok &&
+      rawTrim.length <= 52 &&
+      (/^(genel\s*özet|ilişkiler|iş\s*\/\s*para|iç\s*dünya|iletişim)/i.test(rawTrim) || /^[1-5]$/.test(rawTrim)) &&
+      !/\bbenim\b|\bharitam\b/i.test(low);
+    if (looksLikeTopicLabel) {
+      sessionStore.set(uid, {
+        ...sessionStore.defaultSession(),
+        step: 'await_topic_preset',
+        intent: 'chart_topic_first',
+        topicCodePreset: null,
+        pendingFreeformPersonal: null,
+        pendingTopicCode: null,
+      });
+      await handleTopicPresetMessage(ctx, uid, sessionStore.get(uid), text);
+      return;
+    }
+    await ctx.reply(
+      [
+        'Bunu tam olarak çözemedim; bir iki cümleyle yazabilir misin.',
+        'İstersen /help ile örneklere de bakabilirsin.',
+      ].join('\n'),
+      kb
+    );
+    return;
+  }
+
+  if (cls.category === 'general_astro_knowledge') {
+    if (cls.reason === 'birth_time_faq') {
+      await ctx.reply(MSG_BIRTH_TIME_FAQ, kb);
+      return;
+    }
+    await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+    try {
+      const out = await astroKnowledgeService.answerGeneralConcept(
+        text,
+        env.GROQ_API_KEY,
+        env.GROQ_MODEL
+      );
+      for (const part of chunkTelegram(out)) {
+        await ctx.reply(part);
+      }
+    } catch (e) {
+      logger.error(`Genel sohbet Groq user_id=${uid}`, e);
+      await ctx.reply(USER_SOFT_ERROR, kb);
+      return;
+    }
+    await ctx.reply('Başka bir astroloji sorusun olursa yazabilirsin.', kb);
+    return;
+  }
+
+  const personalCategories = new Set([
+    'personal_chart_reading',
+    'personal_topic_relationship',
+    'personal_topic_career_money',
+    'personal_topic_inner_world',
+    'personal_topic_communication',
+  ]);
+
+  if (personalCategories.has(cls.category)) {
+    const topicCode = cls.topicCode || 'general';
+    const freeform = cls.personalKind === 'freeform';
+
+    if (freeform) {
+      const resolved = resolveChartForUser(uid, s);
+      if (resolved.chart) {
+        if (resolved.usedSavedProfile) {
+          await ctx.reply(MSG_SAVED_PROFILE_HINT, kb);
+        }
+        sessionStore.set(uid, { ...sessionStore.get(uid), lastChartData: resolved.chart });
+        await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
+        try {
+          const ans = await interpretationService.answerPersonalQuestion(
+            resolved.chart,
+            text,
+            env.GROQ_API_KEY,
+            env.GROQ_MODEL
+          );
+          for (const part of chunkTelegram(ans)) {
+            await ctx.reply(part);
+          }
+        } catch (e) {
+          logger.error(`Kişisel yorum hatası user_id=${uid}`, e);
+          await ctx.reply(USER_SOFT_ERROR, kb);
+        }
+        await ctx.reply('Sormaya devam edebilirsin.', kb);
+        return;
+      }
+      sessionStore.set(uid, {
+        ...sessionStore.get(uid),
+        step: 'await_date',
+        intent: 'freeform_personal',
+        pendingFreeformPersonal: text,
+        pendingTopicCode: null,
+        topicCodePreset: null,
+        lastChartData: null,
+        birthYmd: null,
+        birthDateText: null,
+        placeText: null,
+        placeLabel: null,
+        latitude: null,
+        longitude: null,
+        birthTimeText: null,
+        birthHour: null,
+        birthMinute: null,
+        hasKnownBirthTime: null,
+      });
+      logger.info(`Kişisel (serbest) -> doğum toplama user_id=${uid}`);
+      await ctx.reply(
+        'Bunu kişisel haritanda görmek için önce doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)',
+        kb
+      );
+      return;
+    }
+
+    const prof = userProfileStore.getProfile(uid);
+    if (userProfileStore.isProfileComplete(prof)) {
+      const merged = {
+        ...sessionStore.defaultSession(),
+        ...sessionFieldsFromProfile(prof),
+        lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
+        step: 'await_intent',
+      };
+      logger.info(`Doğal dil -> konu yorumu topic=${topicCode} profil var user_id=${uid}`);
+      await ctx.reply('Kayıtlı bilgilerinle haritanı hazırlıyorum…', kb);
+      await deliverChartReading(ctx, uid, merged, topicCode);
+      return;
+    }
+
+    sessionStore.set(uid, {
+      ...sessionStore.defaultSession(),
+      step: 'await_date',
+      intent: 'chart_natural',
+      pendingTopicCode: topicCode,
+      pendingFreeformPersonal: null,
+      topicCodePreset: null,
+    });
+    logger.info(`Doğal dil -> konu yorumu topic=${topicCode} doğum bekleniyor user_id=${uid}`);
+    await ctx.reply(
+      'Bunu haritandan yorumlayabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)',
+      kb
+    );
+    return;
+  }
+
+  await ctx.reply(
+    [
+      'Bunu tam olarak çözemedim; bir iki cümleyle yazabilir misin.',
+      'İstersen /help ile örneklere de bakabilirsin.',
+    ].join('\n'),
+    kb
+  );
+}
+
+async function processIntentClarify(ctx, uid, s, text) {
+  const orig = (s.pendingClarifyText || '').trim();
+  const low = text.toLocaleLowerCase('tr-TR');
+  let suffix = '';
+  if (/\b(haritam|kişisel|doğum|natal|evet)\b/i.test(low) || /\bharita\b/i.test(low)) {
+    suffix = '\n[Kullanıcı bağlamı: kişisel doğum haritası üzerinden.]';
+  } else if (/\b(genel|tanım|kavram)\b/i.test(low)) {
+    suffix = '\n[Kullanıcı bağlamı: yalnızca genel astroloji bilgisi.]';
+  } else {
+    suffix = `\n[Kullanıcı netleştirmesi: ${text}]`;
+  }
+  sessionStore.set(uid, {
+    ...sessionStore.get(uid),
+    step: 'await_intent',
+    pendingClarifyText: null,
+  });
+  await runIntentClassificationFlow(ctx, uid, sessionStore.get(uid), `${orig}${suffix}`, {
+    skipDigitShortcut: true,
+  });
+}
+
 bot.start(async (ctx) => {
   const uid = ctx.from.id;
   logger.info(`Kullanıcı /start yazdı user_id=${uid}`);
@@ -535,268 +859,13 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (step === 'await_intent_clarify') {
+    await processIntentClarify(ctx, uid, s, text);
+    return;
+  }
+
   if (step === 'await_intent') {
-    if (/^[1-4]\b/.test(text.trim())) {
-      const pi = parseMainIntent(text);
-      if (pi.ok) {
-        if (pi.n === 1) {
-          const prof = userProfileStore.getProfile(uid);
-          if (userProfileStore.isProfileComplete(prof)) {
-            sessionStore.set(uid, {
-              ...sessionStore.defaultSession(),
-              step: 'await_topic',
-              intent: 'chart',
-              topicCodePreset: null,
-              pendingFreeformPersonal: null,
-              pendingTopicCode: null,
-              lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
-              ...sessionFieldsFromProfile(prof),
-            });
-            logger.info(`Kısayol:1 kayıtlı profil user_id=${uid}`);
-            await ctx.reply(
-              [
-                'Kayıtlı doğum bilgilerinle devam ediyorum.',
-                'Hangi konuda özet istersin? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim.',
-              ].join('\n'),
-              Markup.removeKeyboard()
-            );
-            return;
-          }
-          sessionStore.set(uid, {
-            step: 'await_date',
-            intent: 'chart',
-            topicCodePreset: null,
-            pendingFreeformPersonal: null,
-            pendingTopicCode: null,
-          });
-          logger.info(`Kısayol:1 doğum toplama user_id=${uid}`);
-          await ctx.reply(
-            'Tamam. Kişisel harita için doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
-            Markup.removeKeyboard()
-          );
-          return;
-        }
-        if (pi.n === 2) {
-          sessionStore.set(uid, {
-            step: 'await_topic_preset',
-            intent: 'chart_topic_first',
-            topicCodePreset: null,
-            pendingFreeformPersonal: null,
-            pendingTopicCode: null,
-          });
-          logger.info(`Kısayol:2 önce konu user_id=${uid}`);
-          await ctx.reply(
-            'Hangi başlıkla ilerleyelim? Örneğin: genel özet, ilişkiler, iş ve para, iç dünya veya iletişim — kısaca yazman yeterli.',
-            Markup.removeKeyboard()
-          );
-          return;
-        }
-        if (pi.n === 3) {
-          sessionStore.set(uid, { step: 'await_concept', intent: 'concept', pendingTopicCode: null });
-          logger.info(`Kısayol:3 kavram user_id=${uid}`);
-          await ctx.reply('Hangi kavramı merak ediyorsun? Kısaca yazabilirsin.', Markup.removeKeyboard());
-          return;
-        }
-        if (pi.n === 4) {
-          logger.info(`Kısayol:4 transit yok user_id=${uid}`);
-          await ctx.reply(MSG_UNSUPPORTED, Markup.removeKeyboard());
-          return;
-        }
-      }
-    }
-
-    const cls = messageClassifier.classifyMessage(text);
-    logger.info(`Sınıflandırma user_id=${uid} category=${cls.category} reason=${cls.reason}`);
-
-    const kb = Markup.removeKeyboard();
-
-    if (cls.category === 'reset_profile') {
-      userProfileStore.deleteProfile(uid);
-      sessionStore.reset(uid);
-      sessionStore.set(uid, { step: 'await_intent' });
-      logger.info(`Metin: reset_profile user_id=${uid}`);
-      await ctx.reply(
-        'Kayıtlı doğum profilin silindi. İstersen yeniden doğum bilgisi vererek devam edebilirsin.',
-        kb
-      );
-      await ctx.reply(START_INTRO, kb);
-      return;
-    }
-
-    if (cls.category === 'update_birth_data') {
-      sessionStore.set(uid, {
-        ...sessionStore.defaultSession(),
-        step: 'await_date',
-        intent: 'update_birth',
-        pendingTopicCode: null,
-      });
-      logger.info(`Metin: update_birth_data user_id=${uid}`);
-      await ctx.reply(
-        'Tamam. Yeni doğum tarihini yazar mısın? (örn: 1998-07-07 veya 7.7.1998)',
-        kb
-      );
-      return;
-    }
-
-    if (cls.category === 'unsupported_horary') {
-      await ctx.reply(MSG_HORARY, kb);
-      return;
-    }
-
-    if (cls.category === 'unsupported_transit') {
-      await ctx.reply(MSG_UNSUPPORTED, kb);
-      return;
-    }
-
-    if (cls.category === 'risky_question') {
-      await ctx.reply(MSG_RISKY_BOUNDARY, kb);
-      return;
-    }
-
-    if (cls.category === 'unclear_message') {
-      const rawTrim = text.trim();
-      const low = rawTrim.toLocaleLowerCase('tr-TR');
-      const tpPick = parseTopicCode(text);
-      const looksLikeTopicLabel =
-        tpPick.ok &&
-        rawTrim.length <= 52 &&
-        (/^(genel\s*özet|ilişkiler|iş\s*\/\s*para|iç\s*dünya|iletişim)/i.test(rawTrim) || /^[1-5]$/.test(rawTrim)) &&
-        !/\bbenim\b|\bharitam\b/i.test(low);
-      if (looksLikeTopicLabel) {
-        sessionStore.set(uid, {
-          ...sessionStore.defaultSession(),
-          step: 'await_topic_preset',
-          intent: 'chart_topic_first',
-          topicCodePreset: null,
-          pendingFreeformPersonal: null,
-          pendingTopicCode: null,
-        });
-        await handleTopicPresetMessage(ctx, uid, sessionStore.get(uid), text);
-        return;
-      }
-      await ctx.reply(`Tam net anlayamadım.\n\n${HELP_SNIPPET}`, kb);
-      return;
-    }
-
-    if (cls.category === 'general_astro_knowledge') {
-      if (cls.reason === 'birth_time_faq') {
-        await ctx.reply(MSG_BIRTH_TIME_FAQ, kb);
-        return;
-      }
-      await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
-      try {
-        const out = await astroKnowledgeService.answerGeneralConcept(
-          text,
-          env.GROQ_API_KEY,
-          env.GROQ_MODEL
-        );
-        for (const part of chunkTelegram(out)) {
-          await ctx.reply(part);
-        }
-      } catch (e) {
-        logger.error(`Genel sohbet Groq user_id=${uid}`, e);
-        await ctx.reply(USER_SOFT_ERROR, kb);
-        return;
-      }
-      await ctx.reply('Başka bir astroloji sorusun olursa yazabilirsin.', kb);
-      return;
-    }
-
-    const personalCategories = new Set([
-      'personal_chart_reading',
-      'personal_topic_relationship',
-      'personal_topic_career_money',
-      'personal_topic_inner_world',
-      'personal_topic_communication',
-    ]);
-
-    if (personalCategories.has(cls.category)) {
-      const topicCode = cls.topicCode || 'general';
-      const freeform = cls.personalKind === 'freeform';
-
-      if (freeform) {
-        const resolved = resolveChartForUser(uid, s);
-        if (resolved.chart) {
-          if (resolved.usedSavedProfile) {
-            await ctx.reply(MSG_SAVED_PROFILE_HINT, kb);
-          }
-          sessionStore.set(uid, { ...sessionStore.get(uid), lastChartData: resolved.chart });
-          await ctx.telegram.sendChatAction(ctx.chat.id, 'typing');
-          try {
-            const ans = await interpretationService.answerPersonalQuestion(
-              resolved.chart,
-              text,
-              env.GROQ_API_KEY,
-              env.GROQ_MODEL
-            );
-            for (const part of chunkTelegram(ans)) {
-              await ctx.reply(part);
-            }
-          } catch (e) {
-            logger.error(`Kişisel yorum hatası user_id=${uid}`, e);
-            await ctx.reply(USER_SOFT_ERROR, kb);
-          }
-          await ctx.reply('Sormaya devam edebilirsin.', kb);
-          return;
-        }
-        sessionStore.set(uid, {
-          ...sessionStore.get(uid),
-          step: 'await_date',
-          intent: 'freeform_personal',
-          pendingFreeformPersonal: text,
-          pendingTopicCode: null,
-          topicCodePreset: null,
-          lastChartData: null,
-          birthYmd: null,
-          birthDateText: null,
-          placeText: null,
-          placeLabel: null,
-          latitude: null,
-          longitude: null,
-          birthTimeText: null,
-          birthHour: null,
-          birthMinute: null,
-          hasKnownBirthTime: null,
-        });
-        logger.info(`Kişisel (serbest) -> doğum toplama user_id=${uid}`);
-        await ctx.reply(
-          'Bunu kişisel haritanda görmek için önce doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)',
-          kb
-        );
-        return;
-      }
-
-      const prof = userProfileStore.getProfile(uid);
-      if (userProfileStore.isProfileComplete(prof)) {
-        const merged = {
-          ...sessionStore.defaultSession(),
-          ...sessionFieldsFromProfile(prof),
-          lastChartData: prof.lastChartData ? cloneJson(prof.lastChartData) : null,
-          step: 'await_intent',
-        };
-        logger.info(`Doğal dil -> konu yorumu topic=${topicCode} profil var user_id=${uid}`);
-        await ctx.reply('Kayıtlı bilgilerinle haritanı hazırlıyorum…', kb);
-        await deliverChartReading(ctx, uid, merged, topicCode);
-        return;
-      }
-
-      sessionStore.set(uid, {
-        ...sessionStore.defaultSession(),
-        step: 'await_date',
-        intent: 'chart_natural',
-        pendingTopicCode: topicCode,
-        pendingFreeformPersonal: null,
-        topicCodePreset: null,
-      });
-      logger.info(`Doğal dil -> konu yorumu topic=${topicCode} doğum bekleniyor user_id=${uid}`);
-      await ctx.reply(
-        'Bunu haritandan yorumlayabilmem için doğum tarihini paylaşır mısın? (örn: 1998-07-07 veya 7.7.1998)',
-        kb
-      );
-      return;
-    }
-
-    await ctx.reply(`Tam net anlayamadım.\n\n${HELP_SNIPPET}`, kb);
+    await runIntentClassificationFlow(ctx, uid, s, text);
     return;
   }
 

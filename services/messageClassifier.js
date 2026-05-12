@@ -1,7 +1,62 @@
 /**
- * Doğal dil → niyet (kurallı, hızlı).
- * Groq kullanmaz; index.js bu çıktıya göre akışı yönlendirir.
+ * Doğal dil → niyet: önce Groq AI, kritik güvenlik/doğum-FAQ için kısa kural katmanı,
+ * ardından tamamen keyword tabanlı yedek (Groq hata / geçersiz JSON).
  */
+
+const Groq = require('groq-sdk');
+const logger = require('./logger');
+
+const VALID_INTENTS = [
+  'general_astro_knowledge',
+  'personal_chart_reading',
+  'personal_topic_relationship',
+  'personal_topic_career_money',
+  'personal_topic_inner_world',
+  'personal_topic_communication',
+  'update_birth_data',
+  'reset_profile',
+  'unsupported_transit',
+  'unsupported_horary',
+  'risky_question',
+  'unclear_message',
+];
+
+const VALID_SAFE_RESPONSE = new Set([
+  'general_info',
+  'personal_chart',
+  'ask_birth_data',
+  'unsupported',
+  'safety_redirect',
+]);
+
+const INTENT_SYSTEM = `Sen bir Türkçe Telegram astroloji botunun niyet sınıflandırıcısısın.
+Kullanıcı mesajını oku ve SADECE geçerli bir JSON nesnesi döndür (markdown yok, açıklama yok).
+
+Şema (alanlar):
+- intent: şu sabitlerden biri olmalı: ${VALID_INTENTS.join(', ')}
+- confidence: 0 ile 1 arası sayı (en iyi tahminin ne kadar net olduğu)
+- topic: kısa konu etiketi (birkaç kelime)
+- needs_birth_data: true veya false
+- safe_response_type: "general_info" | "personal_chart" | "ask_birth_data" | "unsupported" | "safety_redirect"
+- personal_kind: "freeform" | "structured" | null
+- ambiguity: null veya "personal_vs_general"
+
+Kurallar:
+- Mümkünse unclear_message kullanma; emin değilsen en güvenli ve olası niyeti seç.
+- "ambiguity": "personal_vs_general" SADECE mesaj o kadar kısa/belirsiz ki hem genel tanım hem kişisel harita olabilirse (ör. tek kelime gezegen veya burç, "benim/haritam" yok).
+- general_astro_knowledge: kavram tanımı, "X nedir", ev/gezegen genel anlamı, astro terim; kullanıcı kendi haritasından bahsetmiyorsa.
+- personal_chart_reading: doğum haritasına bak, haritamı yorumla, genel kişisel okuma.
+- personal_topic_relationship / career_money / inner_world / communication: ilişki, kariyer/para, iç dünya-aile, iletişim-öğrenme gibi YAŞAM ALANLARI (haritada ilgili ev başlıklarıyla özet).
+- update_birth_data: doğum bilgisini yeniden girmek, haritayı güncellemek, tekrar girmek.
+- reset_profile: profili sil, hafızayı temizle, verileri sıfırla.
+- unsupported_transit: günlük gökyüzü, bugünkü transit, anlık gezegen konumu, günlük horoskop.
+- unsupported_horary: horary, saatlik soru haritası.
+- risky_question: kesin kader, kesin evlilik/ölüm, tıbbi/teşhis, yatırım tavsiyesi, kesin finans sonucu vb.
+- needs_birth_data: kişisel harita veya konu yorumu için doğum verisi gerekir mi (genel bilgi için false).
+- personal_kind: "benim Venüsüm", "7. evim" gibi spesifik yerleşim → freeform; geniş konu başlığı → structured; kişisel değilse null.
+- safe_response_type: intent ile tutarlı olsun (risky → safety_redirect; transit/horary → unsupported; genel bilgi → general_info; kişisel harita → personal_chart veya ask_birth_data).
+
+Yanıtın tek satır JSON olmalı.`;
 
 function tnorm(text) {
   return String(text || '')
@@ -69,7 +124,16 @@ const TOPIC_COMM_RE =
 
 const UNCLEAR_GREETING_RE = /^(hi|hey|selam|merhaba|sa|slm|gunaydin|iyi\s*aksamlar|eee|ee|naber|napıyorsun|napıyorsun)\b/i;
 
+const GUARD_CATEGORIES = new Set([
+  'risky_question',
+  'reset_profile',
+  'update_birth_data',
+  'unsupported_horary',
+  'unsupported_transit',
+]);
+
 /**
+ * Keyword tabanlı sınıflandırma (yedek / guard katmanı).
  * @returns {{
  *   category: string,
  *   reason: string,
@@ -77,7 +141,7 @@ const UNCLEAR_GREETING_RE = /^(hi|hey|selam|merhaba|sa|slm|gunaydin|iyi\s*aksaml
  *   personalKind?: 'structured' | 'freeform',
  * }}
  */
-function classifyMessage(rawText) {
+function classifyMessageFallback(rawText) {
   const t = tnorm(rawText);
   if (!t) return { category: 'unclear_message', reason: 'empty' };
 
@@ -184,4 +248,256 @@ function classifyMessage(rawText) {
   return { category: 'unclear_message', reason: 'no_match' };
 }
 
-module.exports = { classifyMessage };
+/** Senkron yedek: test ve harici çağrılar için */
+function classifyMessage(rawText) {
+  return classifyMessageFallback(rawText);
+}
+
+function intentToTopicCode(intent) {
+  switch (intent) {
+    case 'personal_topic_relationship':
+      return 'relationships';
+    case 'personal_topic_career_money':
+      return 'work_money';
+    case 'personal_topic_inner_world':
+      return 'inner_family';
+    case 'personal_topic_communication':
+      return 'communication_learning';
+    case 'personal_chart_reading':
+      return 'general';
+    default:
+      return 'general';
+  }
+}
+
+function parseGroqJsonContent(content) {
+  const raw = String(content || '').trim();
+  if (!raw) return null;
+  const tryParse = (s) => {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return null;
+    }
+  };
+  let parsed = tryParse(raw);
+  if (parsed) return parsed;
+  const fence = raw.match(/\{[\s\S]*\}/);
+  if (fence) {
+    parsed = tryParse(fence[0]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function normalizeGroqPayload(obj, rawUserText) {
+  if (!obj || typeof obj !== 'object') return null;
+  let intent = String(obj.intent || '').trim();
+  if (!VALID_INTENTS.includes(intent)) intent = 'unclear_message';
+
+  let conf = Number(obj.confidence);
+  if (!Number.isFinite(conf)) conf = 0.6;
+  conf = Math.min(1, Math.max(0, conf));
+
+  const topic = String(obj.topic || '').trim().slice(0, 120);
+  let needsBirth =
+    obj.needs_birth_data === true ||
+    obj.needs_birth_data === 'true' ||
+    obj.needs_birth_data === 1;
+
+  let safeType = String(obj.safe_response_type || '').trim();
+  if (!VALID_SAFE_RESPONSE.has(safeType)) {
+    safeType =
+      intent === 'risky_question'
+        ? 'safety_redirect'
+        : intent === 'unsupported_transit' || intent === 'unsupported_horary'
+          ? 'unsupported'
+          : intent.startsWith('personal')
+            ? 'personal_chart'
+            : 'general_info';
+  }
+
+  let personalKind = obj.personal_kind;
+  if (personalKind !== 'freeform' && personalKind !== 'structured') personalKind = null;
+
+  const ambiguity = obj.ambiguity === 'personal_vs_general' ? 'personal_vs_general' : null;
+
+  if (
+    intent === 'personal_chart_reading' ||
+    intent === 'personal_topic_relationship' ||
+    intent === 'personal_topic_career_money' ||
+    intent === 'personal_topic_inner_world' ||
+    intent === 'personal_topic_communication'
+  ) {
+    if (!personalKind) {
+      personalKind = intent === 'personal_chart_reading' ? 'structured' : 'structured';
+    }
+  }
+
+  const topicCode = intentToTopicCode(intent);
+
+  return {
+    intent,
+    confidence: conf,
+    topic,
+    needsBirthData: needsBirth,
+    safeResponseType: safeType,
+    personalKind,
+    ambiguity,
+    topicCode,
+    rawUserText,
+  };
+}
+
+function groqPayloadToClassification(payload, intentSource) {
+  const {
+    intent,
+    confidence,
+    topic,
+    needsBirthData,
+    safeResponseType,
+    personalKind,
+    ambiguity,
+    topicCode,
+  } = payload;
+
+  const base = {
+    category: intent,
+    reason: 'groq_ai',
+    confidence,
+    topicLabel: topic,
+    needsBirthData,
+    safeResponseType,
+    intentSource,
+    ambiguousPersonalVsGeneral: ambiguity === 'personal_vs_general',
+  };
+
+  const personalTopics = new Set([
+    'personal_topic_relationship',
+    'personal_topic_career_money',
+    'personal_topic_inner_world',
+    'personal_topic_communication',
+  ]);
+
+  if (personalTopics.has(intent)) {
+    return {
+      ...base,
+      topicCode,
+      personalKind: personalKind || 'structured',
+    };
+  }
+  if (intent === 'personal_chart_reading') {
+    return {
+      ...base,
+      topicCode,
+      personalKind: personalKind || 'structured',
+    };
+  }
+  return base;
+}
+
+async function classifyWithGroqRaw(userText, apiKey, model) {
+  const client = new Groq({ apiKey });
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.05,
+    max_tokens: 220,
+    messages: [
+      { role: 'system', content: INTENT_SYSTEM },
+      { role: 'user', content: String(userText || '').trim() },
+    ],
+  });
+  const content = completion.choices?.[0]?.message?.content;
+  return parseGroqJsonContent(content);
+}
+
+/**
+ * Ana giriş: guard (keyword) → Groq → belirsizlikte yedek birleştirme.
+ * @returns {Promise<{
+ *   category: string,
+ *   reason: string,
+ *   topicCode?: string,
+ *   personalKind?: 'structured' | 'freeform',
+ *   confidence?: number|null,
+ *   topicLabel?: string,
+ *   needsBirthData?: boolean,
+ *   safeResponseType?: string,
+ *   intentSource: string,
+ *   ambiguousPersonalVsGeneral?: boolean,
+ *   groqErrorMessage?: string
+ * }>}
+ */
+async function classifyMessageAsync(rawText, options = {}) {
+  const text = String(rawText || '').trim();
+  const fb = classifyMessageFallback(text);
+
+  if (GUARD_CATEGORIES.has(fb.category)) {
+    return { ...fb, intentSource: 'keyword_guard', confidence: 1, topicLabel: '' };
+  }
+  if (fb.reason === 'birth_time_faq') {
+    return {
+      ...fb,
+      intentSource: 'keyword_birth_time_faq',
+      confidence: 1,
+      topicLabel: 'birth_time_unknown',
+      needsBirthData: false,
+      safeResponseType: 'general_info',
+    };
+  }
+
+  const apiKey = (options.apiKey || '').trim();
+  const model = (options.model || 'llama-3.3-70b-versatile').trim();
+
+  if (!apiKey) {
+    return { ...fb, intentSource: 'no_api_key_fallback', confidence: null };
+  }
+
+  try {
+    const parsed = await classifyWithGroqRaw(text, apiKey, model);
+    const norm = normalizeGroqPayload(parsed, text);
+    if (!norm) {
+      logger.error('[intent] Groq geçersiz veya boş JSON', { preview: String(parsed).slice(0, 200) });
+      return { ...fb, intentSource: 'groq_invalid_json', confidence: null, groqErrorMessage: 'invalid_json' };
+    }
+
+    let cls = groqPayloadToClassification(norm, 'groq');
+
+    if (cls.ambiguousPersonalVsGeneral) {
+      cls = { ...cls, reason: 'groq_ambiguous_personal_vs_general', intentSource: 'groq' };
+    }
+
+    if (
+      cls.category === 'unclear_message' &&
+      !cls.ambiguousPersonalVsGeneral &&
+      fb.category !== 'unclear_message'
+    ) {
+      cls = {
+        ...fb,
+        intentSource: 'fallback_after_groq_unclear',
+        confidence: norm.confidence,
+        topicLabel: norm.topic,
+        ambiguousPersonalVsGeneral: false,
+      };
+    }
+
+    return cls;
+  } catch (e) {
+    logger.error('[intent] Groq niyet sınıflandırması başarısız', {
+      message: e.message,
+      stack: e.stack,
+      name: e.name,
+    });
+    return {
+      ...fb,
+      intentSource: 'groq_error',
+      confidence: null,
+      groqErrorMessage: e.message || String(e),
+    };
+  }
+}
+
+module.exports = {
+  classifyMessage,
+  classifyMessageFallback,
+  classifyMessageAsync,
+};
